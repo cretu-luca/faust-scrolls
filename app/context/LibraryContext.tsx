@@ -1,76 +1,88 @@
 'use client';
-import { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 
-interface LibraryEntry {
+interface Entry {
   title: string;
-  author: string;
-  domain: string;
-  citations: string;
-  yearOfPublication: string;
+  authors: string;
+  journal: string;
+  citations: number;
+  year: string;
+  abstract: string;
+  domain?: string;
+  coordinates?: {
+    x: number;
+    y: number;
+  };
 }
 
 interface LibraryContextType {
-  entries: LibraryEntry[];
-  addEntry: (entry: LibraryEntry) => void;
-  updateEntry: (index: number, entry: LibraryEntry) => void;
+  entries: Entry[];
+  allEntries: Entry[];
+  addEntry: (entry: Entry) => void;
+  updateEntry: (index: number, updatedEntry: Entry) => void;
   deleteEntry: (index: number) => void;
+  isLoading: boolean;
+  totalPages: number;
+  totalEntries: number;
 }
 
-const LibraryContext = createContext<LibraryContextType | undefined>(undefined);
+const ITEMS_PER_PAGE = 5;
 
-export function LibraryProvider({ children }: { children: ReactNode }) {
-  const [entries, setEntries] = useState<LibraryEntry[]>([
-    {
-      title: "The Metamorphosis of Prime Intellect",
-      author: "Roger Williams",
-      domain: "Science Fiction",
-      citations: "1247",
-      yearOfPublication: "1994"
-    },
-    {
-      title: "Principles of Quantum Mechanics",
-      author: "Paul Dirac",
-      domain: "Physics",
-      citations: "15783",
-      yearOfPublication: "1930"
-    },
-    {
-      title: "The Alchemist",
-      author: "Paulo Coelho",
-      domain: "Philosophy",
-      citations: "8942",
-      yearOfPublication: "1988"
-    },
-    {
-      title: "Structure and Interpretation of Computer Programs",
-      author: "Harold Abelson",
-      domain: "Computer Science",
-      citations: "6721",
-      yearOfPublication: "1985"
-    },
-    {
-      title: "The Book of Symbols",
-      author: "Carl Jung",
-      domain: "Psychology",
-      citations: "4532",
-      yearOfPublication: "1968"
-    }
-  ]);
+const defaultContextValue: LibraryContextType = {
+  entries: [],
+  allEntries: [],
+  addEntry: () => {},
+  updateEntry: () => {},
+  deleteEntry: () => {},
+  isLoading: true,
+  totalPages: 0,
+  totalEntries: 0
+};
 
-  const addEntry = (entry: LibraryEntry) => {
-    setEntries((prevEntries) => [...prevEntries, entry]);
+const LibraryContext = createContext<LibraryContextType>(defaultContextValue);
+
+export function LibraryProvider({ children }: { children: React.ReactNode }) {
+  const [entries, setEntries] = useState<Entry[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Derived state
+  const totalEntries = entries.length;
+  const totalPages = Math.ceil(totalEntries / ITEMS_PER_PAGE);
+
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        const response = await fetch('/data/articles-with-embeddings.json');
+        if (!response.ok) throw new Error('Failed to load articles');
+        const data = await response.json();
+        setEntries(data || []);
+      } catch (error) {
+        console.error('Error loading initial data:', error);
+        setEntries([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadInitialData();
+  }, []);
+
+  const addEntry = (entry: Entry) => {
+    setEntries(prevEntries => [...(prevEntries || []), entry]);
   };
 
-  const updateEntry = (index: number, entry: LibraryEntry) => {
-    setEntries((prevEntries) => {
+  const updateEntry = (index: number, updatedEntry: Entry) => {
+    setEntries(prevEntries => {
+      if (!prevEntries) return [updatedEntry];
       const newEntries = [...prevEntries];
-      newEntries[index] = entry;
+      newEntries[index] = updatedEntry;
       return newEntries;
     });
   };
 
   const deleteEntry = (index: number) => {
-    setEntries((prevEntries) => {
+    setEntries(prevEntries => {
+      if (!prevEntries) return [];
       const newEntries = [...prevEntries];
       newEntries.splice(index, 1);
       return newEntries;
@@ -78,7 +90,18 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <LibraryContext.Provider value={{ entries, addEntry, updateEntry, deleteEntry }}>
+    <LibraryContext.Provider 
+      value={{ 
+        entries, 
+        allEntries: entries, // allEntries is the same as entries for now
+        addEntry, 
+        updateEntry, 
+        deleteEntry, 
+        isLoading,
+        totalPages,
+        totalEntries
+      }}
+    >
       {children}
     </LibraryContext.Provider>
   );
@@ -86,7 +109,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
 
 export function useLibrary() {
   const context = useContext(LibraryContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error('useLibrary must be used within a LibraryProvider');
   }
   return context;
