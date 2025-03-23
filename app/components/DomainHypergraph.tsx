@@ -1,22 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-
-interface ArxivEntry {
-  title: string;
-  authors: string;
-  journal: string;
-  citations: number;
-  year: string;
-  abstract?: string;
-  coordinates?: {
-    x: number;
-    y: number;
-  };
-}
+import { ArxivEntry } from '../types/arxiv';
+import { resolveArticleCoordinates } from '../utils/embeddings';
 
 interface DomainHypergraphProps {
   entries: ArxivEntry[];
-  useEmbeddings: boolean;
-  similarityThreshold: number;
+  useEmbeddings?: boolean;
+  similarityThreshold?: number;
 }
 
 interface PopupPosition {
@@ -34,86 +23,103 @@ export default function DomainHypergraph({ entries: propsEntries, useEmbeddings,
   const [entries, setEntries] = useState<ArxivEntry[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResult, setSearchResult] = useState<ArxivEntry | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [existingArticles, setExistingArticles] = useState<ArxivEntry[]>([]);
+  const [yearFilter, setYearFilter] = useState<string>('');
+  const [filteredEntries, setFilteredEntries] = useState<ArxivEntry[]>([]);
 
   useEffect(() => {
     const loadArticles = async () => {
       try {
+        setLoading(true);
         const response = await fetch('/data/articles-with-embeddings.json');
         if (!response.ok) throw new Error('Failed to load articles');
         const data = await response.json() as ArxivEntry[];
         
-        const titleToEntry = new Map<string, ArxivEntry>();
-        
-        data.forEach(entry => {
-          if (entry.coordinates && 
-              !isNaN(entry.coordinates.x) && 
-              !isNaN(entry.coordinates.y)) {
-            titleToEntry.set(entry.title, entry);
-          }
-        });
-        
-        const existingCoords = Array.from(titleToEntry.values())
-          .map(entry => entry.coordinates!)
-          .filter(coords => coords && !isNaN(coords.x) && !isNaN(coords.y));
-        
-        const avgX = existingCoords.length > 0 
-          ? existingCoords.reduce((sum, coord) => sum + coord.x, 0) / existingCoords.length 
-          : 0;
-        const avgY = existingCoords.length > 0 
-          ? existingCoords.reduce((sum, coord) => sum + coord.y, 0) / existingCoords.length 
-          : 0;
-        
+        setExistingArticles(data);
+
         if (propsEntries) {
-          propsEntries.forEach((entry, index) => {
-            const existingEntry = titleToEntry.get(entry.title);
-            if (existingEntry) {
-              titleToEntry.set(entry.title, {
-                ...existingEntry,
-                ...entry,
-                coordinates: existingEntry.coordinates
-              });
-            } else {
-              titleToEntry.set(entry.title, {
-                ...entry,
-                coordinates: {
-                  x: avgX + 2 * Math.cos((index * 2 * Math.PI) / (propsEntries.length || 1)),
-                  y: avgY + 2 * Math.sin((index * 2 * Math.PI) / (propsEntries.length || 1))
-                }
-              });
-            }
-          });
-        }
-        
-        const allArticles = Array.from(titleToEntry.values())
-          .filter(entry => 
-            entry.coordinates && 
-            !isNaN(entry.coordinates.x) && 
-            !isNaN(entry.coordinates.y)
-          );
-        
-        setEntries(allArticles);
-        
-        if (allArticles.length > 0) {
-          const xCoords = allArticles.map(entry => entry.coordinates!.x);
-          const yCoords = allArticles.map(entry => entry.coordinates!.y);
-          const padding = 20;
-          setBounds({
-            minX: Math.min(...xCoords) - padding,
-            maxX: Math.max(...xCoords) + padding,
-            minY: Math.min(...yCoords) - padding,
-            maxY: Math.max(...yCoords) + padding
-          });
+          const articlesWithCoordinates = resolveArticleCoordinates(propsEntries, data);
+          
+          setEntries(articlesWithCoordinates);
+          setFilteredEntries(articlesWithCoordinates);
+
+          const validCoords = articlesWithCoordinates
+            .filter(entry => entry.coordinates && !isNaN(entry.coordinates.x) && !isNaN(entry.coordinates.y))
+            .map(entry => entry.coordinates!);
+
+          if (validCoords.length > 0) {
+            const xCoords = validCoords.map(c => c.x);
+            const yCoords = validCoords.map(c => c.y);
+            const padding = 20;
+            setBounds({
+              minX: Math.min(...xCoords) - padding,
+              maxX: Math.max(...xCoords) + padding,
+              minY: Math.min(...yCoords) - padding,
+              maxY: Math.max(...yCoords) + padding
+            });
+          } else {
+            setBounds({ minX: -10, maxX: 10, minY: -10, maxY: 10 });
+          }
         } else {
-          setBounds({ minX: -10, maxX: 10, minY: -10, maxY: 10 });
+          setEntries(data);
+          setFilteredEntries(data);
         }
       } catch (error) {
         console.error('Error loading articles:', error);
         setBounds({ minX: -10, maxX: 10, minY: -10, maxY: 10 });
+      } finally {
+        setLoading(false);
       }
     };
 
     loadArticles();
   }, [propsEntries]);
+
+  useEffect(() => {
+    if (!propsEntries || !existingArticles.length) return;
+
+    const updatedArticles = resolveArticleCoordinates(propsEntries, existingArticles);
+    setEntries(updatedArticles);
+  }, [propsEntries?.map(entry => entry.abstract).join(','), existingArticles]);
+
+  useEffect(() => {
+    if (!yearFilter) {
+      setFilteredEntries(entries);
+      return;
+    }
+
+    const year = parseInt(yearFilter);
+    if (isNaN(year)) {
+      setFilteredEntries(entries);
+      return;
+    }
+
+    const filtered = entries.filter(entry => {
+      const entryYear = parseInt(entry.year);
+      return !isNaN(entryYear) && entryYear === year;
+    });
+
+    setFilteredEntries(filtered);
+
+    if (filtered.length > 0) {
+      const validCoords = filtered
+        .filter(entry => entry.coordinates && !isNaN(entry.coordinates.x) && !isNaN(entry.coordinates.y))
+        .map(entry => entry.coordinates!);
+
+      if (validCoords.length > 0) {
+        const xCoords = validCoords.map(c => c.x);
+        const yCoords = validCoords.map(c => c.y);
+        const padding = 20;
+        setBounds({
+          minX: Math.min(...xCoords) - padding,
+          maxX: Math.max(...xCoords) + padding,
+          minY: Math.min(...yCoords) - padding,
+          maxY: Math.max(...yCoords) + padding
+        });
+      }
+    }
+  }, [yearFilter, entries]);
 
   const handleCanvasMouseMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
     if (!canvasRef.current || selectedArticle) return; // Don't update hover state if an article is selected
@@ -149,7 +155,7 @@ export default function DomainHypergraph({ entries: propsEntries, useEmbeddings,
 
     let closest = null;
     let minDist = Infinity;
-    entries.forEach((article) => {
+    filteredEntries.forEach((article) => {
       if (!article.coordinates) return;
       const dx = article.coordinates.x - dataX;
       const dy = article.coordinates.y - dataY;
@@ -184,7 +190,7 @@ export default function DomainHypergraph({ entries: propsEntries, useEmbeddings,
     }
 
     const normalizedQuery = query.toLowerCase();
-    const allEntries = [...entries];
+    const allEntries = [...filteredEntries];
     if (propsEntries) {
       propsEntries.forEach(entry => {
         if (!allEntries.some(e => e.title === entry.title)) {
@@ -236,9 +242,9 @@ export default function DomainHypergraph({ entries: propsEntries, useEmbeddings,
 
   const getNeighbors = (article: ArxivEntry, radius: number) => {
     if (!article.coordinates) return [];
-    return entries.filter(a => {
+    return filteredEntries.filter(a => {
       if (a === article || !a.coordinates) return false;
-      const coords = a.coordinates; // Destructure to satisfy TypeScript
+      const coords = a.coordinates;
       const dx = coords.x - article.coordinates!.x;
       const dy = coords.y - article.coordinates!.y;
       return Math.sqrt(dx * dx + dy * dy) <= radius;
@@ -246,7 +252,7 @@ export default function DomainHypergraph({ entries: propsEntries, useEmbeddings,
   };
 
   useEffect(() => {
-    if (!canvasRef.current || entries.length === 0) return;
+    if (!canvasRef.current || filteredEntries.length === 0) return;
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
@@ -262,12 +268,12 @@ export default function DomainHypergraph({ entries: propsEntries, useEmbeddings,
     const scaleX = (canvas.width - 2 * padding) / (bounds.maxX - bounds.minX);
     const scaleY = (canvas.height - 2 * padding) / (bounds.maxY - bounds.minY);
 
-    const validCitations = entries.map(e => e.citations || 0).filter(c => !isNaN(c));
+    const validCitations = filteredEntries.map(e => e.citations || 0).filter(c => !isNaN(c));
     const maxCitations = validCitations.length > 0 ? Math.max(...validCitations) : 1;
 
     const searchNeighbors = searchResult ? getNeighbors(searchResult, 3) : [];
 
-    entries.forEach((article) => {
+    filteredEntries.forEach((article) => {
       if (!article.coordinates) return;
 
       const x = (article.coordinates.x - bounds.minX) * scaleX + padding;
@@ -314,7 +320,7 @@ export default function DomainHypergraph({ entries: propsEntries, useEmbeddings,
       }
     });
 
-  }, [entries, bounds, mousePosition, selectedArticle, searchResult]);
+  }, [filteredEntries, bounds, mousePosition, selectedArticle, searchResult]);
 
   const getCitationColor = (citations: number, maxCitations: number, dimmed: boolean = false) => {
     const intensity = Math.pow(citations / maxCitations, 0.3);
@@ -337,73 +343,87 @@ export default function DomainHypergraph({ entries: propsEntries, useEmbeddings,
   const displayedArticle = selectedArticle || hoveredArticle;
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow-lg relative">
-      <div className="mb-6">
-        <input
-          type="text"
-          placeholder="Search by title, author, or journal..."
-          value={searchQuery}
-          onChange={(e) => handleSearch(e.target.value)}
-          className="w-full p-3 border-2 border-gray-300 rounded-lg shadow-sm text-gray-900 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-lg"
-        />
-      </div>
-
-      <canvas
-        ref={canvasRef}
-        onClick={handleCanvasClick}
-        onMouseMove={handleCanvasMouseMove}
-        onMouseLeave={handleCanvasMouseLeave}
-        className="border rounded cursor-pointer"
-      />
-      
-      {displayedArticle && popupPosition && (
-        <div 
-          className="absolute bg-white rounded-lg shadow-xl border p-4 z-10 max-w-md"
-          style={{
-            left: `${popupPosition.x}px`,
-            top: `${popupPosition.y}px`,
-            transform: 'translate(-50%, 20px)'
-          }}
-        >
-          <div className="flex justify-between items-start">
-            <h3 className="font-bold text-lg mb-2 pr-8 text-gray-800">{displayedArticle.title}</h3>
-            <button 
-              onClick={() => {
-                setSelectedArticle(null);
-                setHoveredArticle(null);
-                setPopupPosition(null);
-              }}
-              className="text-gray-600 hover:text-gray-800"
-            >
-              ×
-            </button>
-          </div>
-          <div className="space-y-2 text-gray-700">
-            <p>
-              <span className="font-medium text-gray-800">Author:</span>{" "}
-              {displayedArticle.authors}
-            </p>
-            <p>
-              <span className="font-medium text-gray-800">Year:</span>{" "}
-              {displayedArticle.year}
-            </p>
-            <p>
-              <span className="font-medium text-gray-800">Citations:</span>{" "}
-              {displayedArticle.citations.toLocaleString()}
-            </p>
-            <p>
-              <span className="font-medium text-gray-800">Journal:</span>{" "}
-              {displayedArticle.journal}
-            </p>
-            {displayedArticle.abstract && (
-              <p>
-                <span className="font-medium text-gray-800">Abstract:</span>{" "}
-                <span className="block mt-1">{displayedArticle.abstract}</span>
-              </p>
-            )}
-          </div>
+    <div className="relative w-full h-full">
+      {loading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+          <div className="text-white">Generating visualization...</div>
         </div>
       )}
+      <div className="bg-white p-6 rounded-lg shadow-lg relative">
+        <div className="mb-6 flex gap-4">
+          <input
+            type="text"
+            placeholder="Search by title, author, or journal..."
+            value={searchQuery}
+            onChange={(e) => handleSearch(e.target.value)}
+            className="flex-1 p-3 border-2 border-gray-300 rounded-lg shadow-sm text-gray-900 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-lg"
+          />
+          <input
+            type="text"
+            placeholder="Filter by year..."
+            value={yearFilter}
+            onChange={(e) => setYearFilter(e.target.value)}
+            className="w-40 p-3 border-2 border-gray-300 rounded-lg shadow-sm text-gray-900 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-lg"
+          />
+        </div>
+
+        <canvas
+          ref={canvasRef}
+          onClick={handleCanvasClick}
+          onMouseMove={handleCanvasMouseMove}
+          onMouseLeave={handleCanvasMouseLeave}
+          className="border rounded cursor-pointer w-full h-full"
+        />
+        
+        {displayedArticle && popupPosition && (
+          <div 
+            className="absolute bg-white rounded-lg shadow-xl border p-4 z-10 max-w-md"
+            style={{
+              left: `${popupPosition.x}px`,
+              top: `${popupPosition.y}px`,
+              transform: 'translate(-50%, 20px)'
+            }}
+          >
+            <div className="flex justify-between items-start">
+              <h3 className="font-bold text-lg mb-2 pr-8 text-gray-800">{displayedArticle.title}</h3>
+              <button 
+                onClick={() => {
+                  setSelectedArticle(null);
+                  setHoveredArticle(null);
+                  setPopupPosition(null);
+                }}
+                className="text-gray-600 hover:text-gray-800"
+              >
+                ×
+              </button>
+            </div>
+            <div className="space-y-2 text-gray-700">
+              <p>
+                <span className="font-medium text-gray-800">Author:</span>{" "}
+                {displayedArticle.authors}
+              </p>
+              <p>
+                <span className="font-medium text-gray-800">Year:</span>{" "}
+                {displayedArticle.year}
+              </p>
+              <p>
+                <span className="font-medium text-gray-800">Citations:</span>{" "}
+                {displayedArticle.citations.toLocaleString()}
+              </p>
+              <p>
+                <span className="font-medium text-gray-800">Journal:</span>{" "}
+                {displayedArticle.journal}
+              </p>
+              {displayedArticle.abstract && (
+                <p>
+                  <span className="font-medium text-gray-800">Abstract:</span>{" "}
+                  <span className="block mt-1">{displayedArticle.abstract}</span>
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 } 

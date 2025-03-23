@@ -2,6 +2,7 @@ import { render, act, waitFor } from '@testing-library/react';
 import { LibraryProvider, useLibrary } from '../LibraryContext';
 import { useEffect } from 'react';
 
+// Mock fetch for initial data
 global.fetch = jest.fn(() =>
   Promise.resolve({
     ok: true,
@@ -179,6 +180,7 @@ describe('LibraryContext CRUD Operations', () => {
     expect(typeof contextData.entries[0].citations).toBe('number');
   });
 
+  // DELETE Tests
   it('should delete an entry successfully', async () => {
     let contextData: any;
 

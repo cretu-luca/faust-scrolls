@@ -145,31 +145,15 @@ export default function ListAll() {
                   Filter by Year
                 </label>
                 <input
-                  type="number"
-                  min={yearStats.min}
-                  max={yearStats.max}
-                  step="1"
-                  placeholder={`${yearStats.min} - ${yearStats.max}`}
+                  type="text"
+                  placeholder="Enter year..."
                   value={yearFilter}
                   onChange={(e) => {
-                    const value = e.target.value;
-                    if (value === '') {
-                      setYearFilter('');
-                      setCurrentPage(1);
-                      return;
-                    }
-                    const year = parseInt(value);
-                    if (year >= yearStats.min && year <= yearStats.max) {
-                      setYearFilter(value);
-                      setCurrentPage(1);
-                    }
+                    setYearFilter(e.target.value);
+                    setCurrentPage(1);
                   }}
                   className="w-full p-3 border-2 border-gray-400 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-gray-50 text-gray-900 placeholder-gray-600"
                 />
-                <div className="mt-1 text-xs text-gray-600 flex justify-between">
-                  <span>Min: {yearStats.min}</span>
-                  <span>Max: {yearStats.max}</span>
-                </div>
               </div>
 
               {/* Add sorting controls */}
