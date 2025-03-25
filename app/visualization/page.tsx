@@ -1,5 +1,5 @@
 'use client';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import DomainHypergraph from '../components/DomainHypergraph';
 import CitationsChart from '../components/CitationsChart';
@@ -12,15 +12,19 @@ type SortOrder = 'asc' | 'desc';
 export default function Visualization() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { entries } = useLibrary();
+  const { entries, isLoading } = useLibrary();
+  const [localEntries, setLocalEntries] = useState(entries);
 
+  useEffect(() => {
+    setLocalEntries(entries);
+  }, [entries]);
 
   const searchQuery = searchParams.get('search') || '';
   const yearFilter = searchParams.get('year') || '';
   const sortField = (searchParams.get('sort') as SortField) || 'original';
   const sortOrder = (searchParams.get('order') as SortOrder) || 'asc';
 
-  const filteredEntries = entries.filter(entry => {
+  const filteredEntries = localEntries.filter(entry => {
     const matchesSearch = !searchQuery || 
       entry.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       entry.authors.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -50,6 +54,14 @@ export default function Visualization() {
 
     return sortOrder === 'asc' ? comparison : -comparison;
   });
+
+  if (isLoading) {
+    return (
+      <div className="p-6 bg-[#FFF5E5] min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 bg-[#FFF5E5] min-h-screen">

@@ -1,6 +1,4 @@
-import * as tf from '@tensorflow/tfjs';
 import * as use from '@tensorflow-models/universal-sentence-encoder';
-import TSNE from 'tsne-js';
 import { ArxivEntry } from '../types/arxiv';
 
 let model: use.UniversalSentenceEncoder | null = null;
@@ -10,6 +8,48 @@ async function loadModel() {
     model = await use.load();
   }
   return model;
+}
+
+function simplePCA(embeddings: number[][], dimensions: number = 2): number[][] {
+  // Center the data
+  const mean = embeddings.reduce((acc, row) => {
+    return acc.map((val, i) => val + row[i] / embeddings.length);
+  }, new Array(embeddings[0].length).fill(0));
+
+  const centered = embeddings.map(row => 
+    row.map((val, i) => val - mean[i])
+  );
+
+  // Compute covariance matrix
+  const covariance = centered.map(row => 
+    centered.map(col => 
+      row.reduce((sum, val, i) => sum + val * col[i], 0) / (embeddings.length - 1)
+    )
+  );
+
+  // Simple eigenvalue decomposition (using power iteration)
+  const eigenvectors = [];
+  for (let i = 0; i < dimensions; i++) {
+    let vector = new Array(embeddings[0].length).fill(1);
+    for (let iter = 0; iter < 10; iter++) {
+      // Matrix multiplication
+      const newVector = covariance.map(row => 
+        row.reduce((sum, val, j) => sum + val * vector[j], 0)
+      );
+      
+      // Normalize
+      const norm = Math.sqrt(newVector.reduce((sum, val) => sum + val * val, 0));
+      vector = newVector.map(val => val / norm);
+    }
+    eigenvectors.push(vector);
+  }
+
+  // Project data onto eigenvectors
+  return embeddings.map(row => 
+    eigenvectors.map(eigenvector => 
+      row.reduce((sum, val, i) => sum + val * eigenvector[i], 0)
+    )
+  );
 }
 
 export async function generateEmbeddingsAndCoordinates(articles: ArxivEntry[]): Promise<ArxivEntry[]> {
@@ -22,19 +62,7 @@ export async function generateEmbeddingsAndCoordinates(articles: ArxivEntry[]): 
     const embeddings = await model.embed(abstracts);
     const embeddingsArray = await embeddings.array();
 
-    const tsne = new TSNE({
-      dim: 2,
-      perplexity: Math.min(30.0, Math.max(5.0, articles.length / 4)),
-      earlyExaggeration: 4.0,
-      learningRate: 100.0,
-      nIter: 1000,
-      metric: 'euclidean'
-    });
-
-    tsne.init(embeddingsArray);
-    tsne.run();
-
-    const coordinates = tsne.getOutputScaled();
+    const coordinates = simplePCA(embeddingsArray);
 
     const scaleX = 100;
     const scaleY = 100;

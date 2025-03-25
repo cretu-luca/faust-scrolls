@@ -18,9 +18,9 @@ interface Entry {
 interface LibraryContextType {
   entries: Entry[];
   allEntries: Entry[];
-  addEntry: (entry: Entry) => void;
-  updateEntry: (index: number, updatedEntry: Entry) => void;
-  deleteEntry: (index: number) => void;
+  addEntry: (entry: Entry) => Promise<void>;
+  updateEntry: (index: number, updatedEntry: Entry) => Promise<void>;
+  deleteEntry: (index: number) => Promise<void>;
   isLoading: boolean;
   totalPages: number;
   totalEntries: number;
@@ -31,9 +31,9 @@ const ITEMS_PER_PAGE = 5;
 const defaultContextValue: LibraryContextType = {
   entries: [],
   allEntries: [],
-  addEntry: () => {},
-  updateEntry: () => {},
-  deleteEntry: () => {},
+  addEntry: async () => {},
+  updateEntry: async () => {},
+  deleteEntry: async () => {},
   isLoading: true,
   totalPages: 0,
   totalEntries: 0
@@ -67,26 +67,47 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     loadInitialData();
   }, []);
 
-  const addEntry = (entry: Entry) => {
-    setEntries(prevEntries => [...(prevEntries || []), entry]);
+  const addEntry = async (entry: Entry) => {
+    try {
+      // Simulate async operation
+      await new Promise(resolve => setTimeout(resolve, 0));
+      setEntries(prevEntries => [...(prevEntries || []), entry]);
+    } catch (error) {
+      console.error('Error adding entry:', error);
+      throw error;
+    }
   };
 
-  const updateEntry = (index: number, updatedEntry: Entry) => {
-    setEntries(prevEntries => {
-      if (!prevEntries) return [updatedEntry];
-      const newEntries = [...prevEntries];
-      newEntries[index] = updatedEntry;
-      return newEntries;
-    });
+  const updateEntry = async (index: number, updatedEntry: Entry) => {
+    try {
+      // Simulate async operation
+      await new Promise(resolve => setTimeout(resolve, 0));
+      setEntries(prevEntries => {
+        if (!prevEntries) return [updatedEntry];
+        const newEntries = [...prevEntries];
+        newEntries[index] = updatedEntry;
+        return newEntries;
+      });
+    } catch (error) {
+      console.error('Error updating entry:', error);
+      throw error;
+    }
   };
 
-  const deleteEntry = (index: number) => {
-    setEntries(prevEntries => {
-      if (!prevEntries) return [];
-      const newEntries = [...prevEntries];
-      newEntries.splice(index, 1);
-      return newEntries;
-    });
+  const deleteEntry = async (index: number) => {
+    try {
+      // Simulate async operation
+      await new Promise(resolve => setTimeout(resolve, 0));
+      setEntries(prevEntries => {
+        if (!prevEntries) return [];
+        const newEntries = [...prevEntries];
+        newEntries.splice(index, 1);
+        return newEntries;
+      });
+    } catch (error) {
+      console.error('Error deleting entry:', error);
+      throw error;
+    }
   };
 
   return (

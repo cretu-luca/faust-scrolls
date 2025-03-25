@@ -2,7 +2,6 @@ import { render, act, waitFor } from '@testing-library/react';
 import { LibraryProvider, useLibrary } from '../LibraryContext';
 import { useEffect } from 'react';
 
-// Mock fetch for initial data
 global.fetch = jest.fn(() =>
   Promise.resolve({
     ok: true,
@@ -19,7 +18,11 @@ global.fetch = jest.fn(() =>
   })
 );
 
-const TestComponent = ({ onContextReady }: { onContextReady: (context: any) => void }) => {
+type TestData = {
+  // Define your test data structure
+};
+
+const TestComponent = ({ onContextReady }: { onContextReady: (context: TestData) => void }) => {
   const context = useLibrary();
   useEffect(() => {
     onContextReady(context);
@@ -33,7 +36,7 @@ describe('LibraryContext CRUD Operations', () => {
   });
 
   it('should add a new entry successfully', async () => {
-    let contextData: any;
+    let contextData: TestData;
     
     const newEntry = {
       title: "New Article",
@@ -66,7 +69,7 @@ describe('LibraryContext CRUD Operations', () => {
   });
 
   it('should add entry with correct data types', async () => {
-    let contextData: any;
+    let contextData: TestData;
     
     const newEntry = {
       title: "Type Test Article",
@@ -102,7 +105,7 @@ describe('LibraryContext CRUD Operations', () => {
   });
 
   it('should load initial data correctly', async () => {
-    let contextData: any;
+    let contextData: TestData;
 
     render(
       <LibraryProvider>
@@ -119,7 +122,7 @@ describe('LibraryContext CRUD Operations', () => {
   });
 
   it('should update an existing entry', async () => {
-    let contextData: any;
+    let contextData: TestData;
     
     const updatedEntry = {
       title: "Updated Article",
@@ -151,7 +154,7 @@ describe('LibraryContext CRUD Operations', () => {
   });
 
   it('should maintain data structure after update', async () => {
-    let contextData: any;
+    let contextData: TestData;
     
     const updatedEntry = {
       title: "Structure Test",
@@ -182,7 +185,7 @@ describe('LibraryContext CRUD Operations', () => {
 
   // DELETE Tests
   it('should delete an entry successfully', async () => {
-    let contextData: any;
+    let contextData: TestData;
 
     render(
       <LibraryProvider>
@@ -204,7 +207,7 @@ describe('LibraryContext CRUD Operations', () => {
   });
 
   it('should update entries length after deletion', async () => {
-    let contextData: any;
+    let contextData: TestData;
 
     render(
       <LibraryProvider>
