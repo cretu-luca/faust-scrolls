@@ -2,18 +2,16 @@ import { useEffect, useRef, useState } from 'react';
 import { ArxivEntry } from '../types/arxiv';
 import { resolveArticleCoordinates } from '../utils/embeddings';
 
-interface DomainHypergraphProps {
-  entries: ArxivEntry[];
-  useEmbeddings?: boolean;
-  similarityThreshold?: number;
-}
-
 interface PopupPosition {
   x: number;
   y: number;
 }
 
-export default function DomainHypergraph({ entries: propsEntries, useEmbeddings, similarityThreshold }: DomainHypergraphProps) {
+interface DomainHypergraphProps {
+  entries: ArxivEntry[];
+}
+
+export default function DomainHypergraph({ entries: inputEntries }: DomainHypergraphProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [hoveredArticle, setHoveredArticle] = useState<ArxivEntry | null>(null);
   const [selectedArticle, setSelectedArticle] = useState<ArxivEntry | null>(null);
@@ -38,8 +36,8 @@ export default function DomainHypergraph({ entries: propsEntries, useEmbeddings,
         
         setExistingArticles(data);
 
-        if (propsEntries) {
-          const articlesWithCoordinates = resolveArticleCoordinates(propsEntries, data);
+        if (inputEntries) {
+          const articlesWithCoordinates = resolveArticleCoordinates(inputEntries, data);
           
           setEntries(articlesWithCoordinates);
           setFilteredEntries(articlesWithCoordinates);
@@ -74,14 +72,14 @@ export default function DomainHypergraph({ entries: propsEntries, useEmbeddings,
     };
 
     loadArticles();
-  }, [propsEntries]);
+  }, [inputEntries]);
 
   useEffect(() => {
-    if (!propsEntries || !existingArticles.length) return;
+    if (!inputEntries || !existingArticles.length) return;
 
-    const updatedArticles = resolveArticleCoordinates(propsEntries, existingArticles);
+    const updatedArticles = resolveArticleCoordinates(inputEntries, existingArticles);
     setEntries(updatedArticles);
-  }, [propsEntries?.map(entry => entry.abstract).join(','), existingArticles]);
+  }, [inputEntries?.map(entry => entry.abstract).join(','), existingArticles]);
 
   useEffect(() => {
     if (!yearFilter) {
@@ -191,8 +189,8 @@ export default function DomainHypergraph({ entries: propsEntries, useEmbeddings,
 
     const normalizedQuery = query.toLowerCase();
     const allEntries = [...filteredEntries];
-    if (propsEntries) {
-      propsEntries.forEach(entry => {
+    if (inputEntries) {
+      inputEntries.forEach(entry => {
         if (!allEntries.some(e => e.title === entry.title)) {
           allEntries.push(entry);
         }

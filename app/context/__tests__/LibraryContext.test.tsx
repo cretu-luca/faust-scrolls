@@ -18,6 +18,8 @@ global.fetch = jest.fn(() =>
   })
 );
 
+type EmptyObject = Record<string, never>;
+
 type TestData = {
   // Define your test data structure
 };

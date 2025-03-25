@@ -1,5 +1,5 @@
 'use client';
-import { useState, ChangeEvent, FormEvent, useEffect } from 'react';
+import { useState, ChangeEvent, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLibrary } from './context/LibraryContext';
 
@@ -26,11 +26,6 @@ export default function Home() {
   const router = useRouter();
   const { addEntry, entries, isLoading } = useLibrary();
   const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
-  const [localEntries, setLocalEntries] = useState<Entry[]>(entries);
-
-  useEffect(() => {
-    setLocalEntries(entries);
-  }, [entries]);
 
   const [formData, setFormData] = useState<Entry>({
     title: '',

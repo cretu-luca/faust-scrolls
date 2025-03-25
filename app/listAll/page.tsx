@@ -3,20 +3,6 @@ import React, { useState } from "react";
 import { useLibrary } from "../context/LibraryContext";
 import { useRouter } from "next/navigation";
 
-interface Entry {
-  title: string;
-  authors: string;
-  journal: string;
-  citations: number;
-  year: string;
-  abstract: string;
-  domain?: string;
-  coordinates?: {
-    x: number;
-    y: number;
-  };
-}
-
 type SortField = 'original' | 'year' | 'citations';
 type SortOrder = 'asc' | 'desc';
 
