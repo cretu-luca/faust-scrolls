@@ -24,7 +24,7 @@ interface Entry {
 
 export default function Home() {
   const router = useRouter();
-  const { addEntry, entries, isLoading } = useLibrary();
+  const { addEntry, isLoading } = useLibrary();
   const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
 
   const [formData, setFormData] = useState<Entry>({

@@ -18,10 +18,19 @@ global.fetch = jest.fn(() =>
   })
 );
 
-type EmptyObject = Record<string, never>;
-
 type TestData = {
-  // Define your test data structure
+  entries: Array<{
+    title: string;
+    authors: string;
+    citations: number;
+    year: string;
+    journal: string;
+    abstract: string;
+    domain?: string;
+  }>;
+  addEntry: (entry: TestData['entries'][0]) => Promise<void>;
+  updateEntry: (index: number, entry: TestData['entries'][0]) => Promise<void>;
+  deleteEntry: (index: number) => Promise<void>;
 };
 
 const TestComponent = ({ onContextReady }: { onContextReady: (context: TestData) => void }) => {

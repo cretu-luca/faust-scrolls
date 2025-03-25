@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { ArxivEntry } from '../types/arxiv';
 import { resolveArticleCoordinates } from '../utils/embeddings';
 
@@ -74,12 +74,23 @@ export default function DomainHypergraph({ entries: inputEntries }: DomainHyperg
     loadArticles();
   }, [inputEntries]);
 
+  const getNeighbors = useCallback((article: ArxivEntry, radius: number) => {
+    if (!article.coordinates) return [];
+    return filteredEntries.filter(a => {
+      if (a === article || !a.coordinates) return false;
+      const coords = a.coordinates;
+      const dx = coords.x - article.coordinates!.x;
+      const dy = coords.y - article.coordinates!.y;
+      return Math.sqrt(dx * dx + dy * dy) <= radius;
+    });
+  }, [filteredEntries]);
+
   useEffect(() => {
     if (!inputEntries || !existingArticles.length) return;
 
     const updatedArticles = resolveArticleCoordinates(inputEntries, existingArticles);
     setEntries(updatedArticles);
-  }, [inputEntries?.map(entry => entry.abstract).join(','), existingArticles]);
+  }, [inputEntries, existingArticles]);
 
   useEffect(() => {
     if (!yearFilter) {
@@ -238,17 +249,6 @@ export default function DomainHypergraph({ entries: inputEntries }: DomainHyperg
     }
   };
 
-  const getNeighbors = (article: ArxivEntry, radius: number) => {
-    if (!article.coordinates) return [];
-    return filteredEntries.filter(a => {
-      if (a === article || !a.coordinates) return false;
-      const coords = a.coordinates;
-      const dx = coords.x - article.coordinates!.x;
-      const dy = coords.y - article.coordinates!.y;
-      return Math.sqrt(dx * dx + dy * dy) <= radius;
-    });
-  };
-
   useEffect(() => {
     if (!canvasRef.current || filteredEntries.length === 0) return;
 
@@ -318,7 +318,7 @@ export default function DomainHypergraph({ entries: inputEntries }: DomainHyperg
       }
     });
 
-  }, [filteredEntries, bounds, mousePosition, selectedArticle, searchResult]);
+  }, [filteredEntries, bounds, mousePosition, selectedArticle, searchResult, getNeighbors]);
 
   const getCitationColor = (citations: number, maxCitations: number, dimmed: boolean = false) => {
     const intensity = Math.pow(citations / maxCitations, 0.3);
