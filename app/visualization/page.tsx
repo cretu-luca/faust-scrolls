@@ -1,5 +1,5 @@
 'use client';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import DomainHypergraph from '../components/DomainHypergraph';
 import CitationsChart from '../components/CitationsChart';
@@ -9,7 +9,7 @@ import { useLibrary } from '../context/LibraryContext';
 type SortField = 'original' | 'year' | 'citations';
 type SortOrder = 'asc' | 'desc';
 
-export default function Visualization() {
+function VisualizationContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { entries, isLoading } = useLibrary();
@@ -82,5 +82,17 @@ export default function Visualization() {
       <CitationsChart entries={sortedEntries} />
       <YearChart entries={sortedEntries} />
     </div>
+  );
+}
+
+export default function Visualization() {
+  return (
+    <Suspense fallback={
+      <div className="p-6 bg-[#FFF5E5] min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
+      </div>
+    }>
+      <VisualizationContent />
+    </Suspense>
   );
 } 
