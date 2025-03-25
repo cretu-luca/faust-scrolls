@@ -28,7 +28,7 @@ function simplePCA(embeddings: number[][], dimensions: number = 2): number[][] {
   );
 
   // Simple eigenvalue decomposition (using power iteration)
-  const eigenvectors = [];
+  const eigenvectors: number[][] = [];
   for (let i = 0; i < dimensions; i++) {
     let vector = new Array(embeddings[0].length).fill(1);
     for (let iter = 0; iter < 10; iter++) {
