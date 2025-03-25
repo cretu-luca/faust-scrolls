@@ -77,8 +77,6 @@ export default function Visualization() {
 
       <DomainHypergraph 
         entries={sortedEntries} 
-        useEmbeddings={false} 
-        similarityThreshold={0.7}
       />
 
       <CitationsChart entries={sortedEntries} />
