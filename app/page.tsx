@@ -102,39 +102,30 @@ export default function Home() {
     }
   };
 
-  // After the useEffect blocks, add the color utility function
   const getGradientColor = (value: number, min: number, max: number, inverse: boolean = false) => {
-    // Prevent division by zero
     if (min === max) return { bg: 'rgba(255, 255, 0, 0.3)', text: '#000000' }; 
     
-    // Calculate where the value falls in the range (0-1)
     let percentage = (value - min) / (max - min);
     
-    // If inverse is true, flip the percentage (for years - newer = greener)
     if (inverse) {
       percentage = 1 - percentage;
     }
     
-    // Clamp between 0-1
     percentage = Math.max(0, Math.min(1, percentage));
     
-    // Generate RGB values for a red-to-green gradient
     const r = Math.round(255 * (1 - percentage));
     const g = Math.round(255 * percentage);
     const b = 0;
     
-    // Determine text color based on background brightness
     const brightness = (r * 299 + g * 587 + b * 114) / 1000;
     const textColor = brightness > 128 ? '#000000' : '#ffffff';
     
-    // Return both background color and text color
     return { 
       bg: `rgba(${r}, ${g}, ${b}, 0.7)`, 
       text: textColor 
     };
   };
 
-  // Calculate min/max values for year and citations
   const yearStats = articles.reduce((stats, article) => ({
     min: Math.min(stats.min, article.year),
     max: Math.max(stats.max, article.year)

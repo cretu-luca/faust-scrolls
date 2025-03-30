@@ -12,27 +12,19 @@ export function getGradientColor(
   max: number, 
   inverse: boolean = false
 ): string {
-  // Prevent division by zero
-  if (min === max) return '#ffff00'; // Yellow as default if there's no range
+  if (min === max) return '#ffff00';
   
-  // Calculate the percentage (0-1) where the value falls in the range
   let percentage = (value - min) / (max - min);
   
-  // If inverse is true, flip the percentage
   if (inverse) {
     percentage = 1 - percentage;
   }
   
-  // Clamp between 0-1 to handle edge cases
   percentage = Math.max(0, Math.min(1, percentage));
   
-  // Generate RGB values for a red-to-green gradient
-  // Red component decreases as percentage increases
-  // Green component increases as percentage increases
   const r = Math.floor(255 * (1 - percentage));
   const g = Math.floor(255 * percentage);
-  const b = 0; // No blue for red-to-green
+  const b = 0;
   
-  // Convert RGB to hex
   return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
 } 

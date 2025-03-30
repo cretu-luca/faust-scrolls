@@ -20,7 +20,6 @@ interface ArticleInput {
 }
 
 export default function EditArticle({ params }: { params: Params | Promise<Params> }) {
-  // Use React.use() to unwrap the params promise if needed
   const resolvedParams = params instanceof Promise ? React.use(params) : params;
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -123,16 +122,13 @@ export default function EditArticle({ params }: { params: Params | Promise<Param
         
         console.log(`Attempting to update article with index: ${resolvedParams.id}`);
         
-        // Update the article using the API
         await api.articles.update(resolvedParams.id, formData);
         
-        // Navigate back to the home page
         router.push('/');
       } catch (error) {
         console.error('Error updating article:', error);
         const errorDetail = (error as any)?.message || '';
         
-        // Check for specific error messages
         if (errorDetail.includes('Article with index')) {
           setSubmitError(`The article you're trying to edit (index ${resolvedParams.id}) could not be found. It may have been deleted or there might be an issue with the index.`);
         } else if (errorDetail.includes('Article with ID')) {

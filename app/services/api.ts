@@ -38,7 +38,6 @@ export const api = {
         const errorText = await response.text();
         console.error(`API Error (${response.status}):`, errorText);
         
-        // Log additional debugging information
         if (options.body) {
           try {
             const bodyObj = JSON.parse(options.body as string);
@@ -74,7 +73,6 @@ export const api = {
     }, 
 
     async getByIndex(index: number): Promise<Article> {
-      // Get article by its index property, not position in the list
       return api.fetch<Article>(`/article/${index}`);
     },
 

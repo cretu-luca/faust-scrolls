@@ -10,6 +10,38 @@ interface DomainHypergraphProps {
   entries: ArxivEntry[];
 }
 
+// Helper function to resolve article coordinates
+const resolveArticleCoordinates = (articles: ArxivEntry[], referenceArticles: ArxivEntry[]): ArxivEntry[] => {
+  return articles.map(article => {
+    // If the article already has coordinates, use them
+    if (article.coordinates && !isNaN(article.coordinates.x) && !isNaN(article.coordinates.y)) {
+      return article;
+    }
+    
+    // Try to find a match in the reference articles by title or other fields
+    const match = referenceArticles.find(ref => 
+      ref.title.toLowerCase() === article.title.toLowerCase() ||
+      (ref.authors === article.authors && ref.journal === article.journal)
+    );
+    
+    if (match && match.coordinates) {
+      return {
+        ...article,
+        coordinates: { ...match.coordinates }
+      };
+    }
+    
+    // If no match, assign random coordinates
+    return {
+      ...article,
+      coordinates: {
+        x: Math.random() * 100 - 50,
+        y: Math.random() * 100 - 50
+      }
+    };
+  });
+};
+
 export default function DomainHypergraph({ entries: inputEntries }: DomainHypergraphProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [hoveredArticle, setHoveredArticle] = useState<ArxivEntry | null>(null);
