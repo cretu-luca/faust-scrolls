@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { ArxivEntry } from '../types/arxiv';
-import { resolveArticleCoordinates } from '../utils/embeddings';
 
 interface PopupPosition {
   x: number;

@@ -1,101 +1,72 @@
 "use client";
-import React, { useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { useLibrary } from '../../context/LibraryContext';
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { api } from '../../services/api';
+import { Article } from '../../types/article';
 
-interface Entry {
-  title: string;
-  authors: string;
-  journal: string;
-  citations: number;
-  year: string;
-  abstract: string;
-  domain?: string;
-  coordinates?: {
-    x: number;
-    y: number;
-  };
-}
+type Params = { id: string };
 
-type SortField = 'original' | 'year' | 'citations';
-type SortOrder = 'asc' | 'desc';
-
-export default function Details({ params }: { params: Promise<{ id: string }> }) {
+export default function Details({ params }: { params: Params | Promise<Params> }) {
+  // Use React.use() to unwrap the params promise if needed
+  const resolvedParams = params instanceof Promise ? React.use(params) : params;
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const [isEditing, setIsEditing] = useState(false);
-  const resolvedParams = React.use(params);
-  const { entries, updateEntry, deleteEntry, isLoading } = useLibrary();
+  const [article, setArticle] = useState<Article | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  const searchQuery = searchParams.get('search') || '';
-  const yearFilter = searchParams.get('year') || '';
-  const sortField = (searchParams.get('sort') as SortField) || 'original';
-  const sortOrder = (searchParams.get('order') as SortOrder) || 'asc';
-
-  const filteredEntries = entries.filter(entry => {
-    const matchesSearch = !searchQuery || 
-      entry.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      entry.authors.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      entry.abstract.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (entry.journal && entry.journal.toLowerCase().includes(searchQuery.toLowerCase()));
-
-    const matchesYear = !yearFilter || entry.year.includes(yearFilter);
-
-    return matchesSearch && matchesYear;
-  });
-
-  const sortedEntries = [...filteredEntries].sort((a, b) => {
-    let comparison = 0;
-    
-    switch (sortField) {
-      case 'original':
-        return 0;
-      case 'year':
-        comparison = parseInt(a.year) - parseInt(b.year);
-        break;
-      case 'citations':
-        comparison = a.citations - b.citations;
-        break;
-      default:
-        return 0;
-    }
-
-    return sortOrder === 'asc' ? comparison : -comparison;
-  });
-  
-  const index = parseInt(resolvedParams.id);
-  const entry = sortedEntries[index];
-
-  const handleDelete = () => {
-    if (!entry) return;
-    if (window.confirm('Are you sure you want to delete this article?')) {
-  
-      const originalIndex = entries.findIndex(e => 
-        e.title === entry.title && 
-        e.authors === entry.authors &&
-        e.year === entry.year &&
-        e.citations === entry.citations
-      );
-      if (originalIndex !== -1) {
-        deleteEntry(originalIndex);
+  useEffect(() => {
+    const fetchArticle = async () => {
+      try {
+        setIsLoading(true);
+        const index = parseInt(resolvedParams.id);
+        
+        if (isNaN(index) || index < 0) {
+          setError("Invalid article ID");
+          return;
+        }
+        
+        console.log("Fetching article with index:", index);
+        const article = await api.articles.getByIndex(index);
+        console.log("Fetched article:", article);
+        setArticle(article);
+        setError(null);
+      } catch (err) {
+        console.error('Failed to fetch article:', err);
+        if ((err as any).status === 404) {
+          setError('Article not found');
+        } else {
+          setError('Failed to load article. Please try again later.');
+        }
+      } finally {
+        setIsLoading(false);
       }
-      router.push('/listAll');
+    };
+
+    fetchArticle();
+  }, [resolvedParams.id]);
+
+  const handleEdit = () => {
+    if (article) {
+      router.push(`/edit/${article.index}`);
     }
   };
 
-  const handleUpdate = (updatedEntry: Entry) => {
-    if (!entry) return;
-
-    const originalIndex = entries.findIndex(e => 
-      e.title === entry.title && 
-      e.authors === entry.authors &&
-      e.year === entry.year &&
-      e.citations === entry.citations
-    );
-    if (originalIndex !== -1) {
-      updateEntry(originalIndex, updatedEntry);
+  const handleDelete = async () => {
+    if (!article) {
+      setError('Cannot delete article: Article not found');
+      return;
     }
-    setIsEditing(false);
+
+    try {
+      setIsDeleting(true);
+      await api.articles.delete(article.index.toString());
+      router.push('/');
+    } catch (err) {
+      console.error('Failed to delete article:', err);
+      setError('Failed to delete article. Please try again later.');
+      setIsDeleting(false);
+    }
   };
 
   if (isLoading) {
@@ -113,123 +84,18 @@ export default function Details({ params }: { params: Promise<{ id: string }> })
     );
   }
 
-  if (!entry) {
+  if (error || !article) {
     return (
       <div className="min-h-screen bg-[#FFF5E5] p-6">
         <div className="max-w-3xl mx-auto">
           <button
-            onClick={() => router.back()}
-            className="mb-4 bg-gray-800 text-white px-4 py-2 rounded hover:bg-gray-700 transition-colors"
+            onClick={() => router.push('/')}
+            className="mb-4 bg-[#E5EFFF] text-gray-800 px-4 py-2 rounded hover:bg-blue-100 transition-colors"
           >
-            Go Back
+            Back to Library
           </button>
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-            Article not found
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (isEditing) {
-    return (
-      <div className="min-h-screen bg-[#FFF5E5] p-6">
-        <div className="max-w-3xl mx-auto">
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Edit Article</h2>
-            <form onSubmit={(e) => {
-              e.preventDefault();
-              const formData = new FormData(e.currentTarget);
-              const updatedEntry = {
-                title: formData.get('title') as string,
-                authors: formData.get('authors') as string,
-                journal: formData.get('journal') as string,
-                year: formData.get('year') as string,
-                citations: parseInt(formData.get('citations') as string),
-                abstract: formData.get('abstract') as string,
-                domain: entry.domain,
-                coordinates: entry.coordinates
-              };
-              handleUpdate(updatedEntry);
-            }}>
-              <div className="space-y-6">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-900 mb-2">Title</label>
-                  <input
-                    type="text"
-                    name="title"
-                    defaultValue={entry.title}
-                    required
-                    className="mt-1 block w-full rounded-md border-2 border-gray-300 px-4 py-2 text-gray-900 bg-white shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-900 mb-2">Authors</label>
-                  <input
-                    type="text"
-                    name="authors"
-                    defaultValue={entry.authors}
-                    required
-                    className="mt-1 block w-full rounded-md border-2 border-gray-300 px-4 py-2 text-gray-900 bg-white shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-900 mb-2">Journal</label>
-                  <input
-                    type="text"
-                    name="journal"
-                    defaultValue={entry.journal}
-                    required
-                    className="mt-1 block w-full rounded-md border-2 border-gray-300 px-4 py-2 text-gray-900 bg-white shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-900 mb-2">Year</label>
-                  <input
-                    type="number"
-                    name="year"
-                    defaultValue={entry.year}
-                    required
-                    className="mt-1 block w-full rounded-md border-2 border-gray-300 px-4 py-2 text-gray-900 bg-white shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-900 mb-2">Citations</label>
-                  <input
-                    type="number"
-                    name="citations"
-                    defaultValue={entry.citations}
-                    required
-                    className="mt-1 block w-full rounded-md border-2 border-gray-300 px-4 py-2 text-gray-900 bg-white shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-900 mb-2">Abstract</label>
-                  <textarea
-                    name="abstract"
-                    defaultValue={entry.abstract}
-                    required
-                    rows={6}
-                    className="mt-1 block w-full rounded-md border-2 border-gray-300 px-4 py-2 text-gray-900 bg-white shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div className="flex gap-4 pt-4">
-                  <button
-                    type="submit"
-                    className="flex-1 bg-blue-600 text-white px-6 py-3 rounded-md font-semibold hover:bg-blue-700 transition-colors"
-                  >
-                    Save Changes
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsEditing(false)}
-                    className="flex-1 bg-gray-600 text-white px-6 py-3 rounded-md font-semibold hover:bg-gray-700 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </form>
+            {error || "Article not found"}
           </div>
         </div>
       </div>
@@ -241,51 +107,44 @@ export default function Details({ params }: { params: Promise<{ id: string }> })
       <div className="max-w-3xl mx-auto">
         <div className="flex justify-between items-center mb-4">
           <button
-            onClick={() => router.back()}
-            className="bg-gray-800 text-white px-4 py-2 rounded hover:bg-gray-700 transition-colors"
+            onClick={() => router.push('/')}
+            className="bg-[#E5EFFF] text-gray-800 px-4 py-2 rounded hover:bg-blue-100 transition-colors"
           >
-            Go Back
+            Back to Library
           </button>
-          <div className="space-x-4">
+          <div className="space-x-2">
             <button
-              onClick={() => setIsEditing(true)}
-              className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors"
+              onClick={handleEdit}
+              className="bg-[#E5EFFF] text-gray-800 px-4 py-2 rounded hover:bg-blue-100 transition-colors"
             >
               Edit
             </button>
             <button
               onClick={handleDelete}
-              className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition-colors"
+              disabled={isDeleting}
+              className="bg-red-100 text-red-800 px-4 py-2 rounded hover:bg-red-200 transition-colors disabled:opacity-50"
             >
-              Delete
+              {isDeleting ? 'Deleting...' : 'Delete'}
             </button>
           </div>
         </div>
         
         <div className="bg-white rounded-lg shadow-md p-6">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">{entry.title}</h1>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">{article.title}</h1>
           
           <div className="mb-4">
-            <p className="text-gray-600">{entry.authors}</p>
+            <p className="text-gray-600">{article.authors}</p>
             <p className="text-gray-600">
-              {entry.journal} • {entry.year} • {entry.citations} citations
+              {article.journal} • {article.year} • {article.citations} citations
             </p>
           </div>
           
-          {entry.domain && (
-            <div className="mb-4">
-              <span className="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded text-sm">
-                {entry.domain}
-              </span>
-            </div>
-          )}
-          
           <div className="prose max-w-none">
             <h2 className="text-xl font-semibold text-gray-900 mb-2">Abstract</h2>
-            <p className="text-gray-700 whitespace-pre-line">{entry.abstract}</p>
+            <p className="text-gray-700 whitespace-pre-line">{article.abstract}</p>
           </div>
         </div>
       </div>
     </div>
   );
-} 
+}

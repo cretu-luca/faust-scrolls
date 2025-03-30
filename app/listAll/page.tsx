@@ -76,12 +76,36 @@ export default function ListAll() {
     max: Math.max(stats.max, parseInt(entry.year))
   }), { min: Infinity, max: -Infinity });
 
-  const getGradientColor = (value: number, min: number, max: number) => {
-    const normalized = (value - min) / (max - min);
-    const r = Math.round(255 * (1 - normalized));
-    const g = Math.round(255 * normalized);
+  const getGradientColor = (value: number, min: number, max: number, inverse: boolean = false) => {
+    // Prevent division by zero
+    if (min === max) return { bg: 'rgba(255, 255, 0, 0.3)', text: '#000000' }; 
+    
+    // Calculate where the value falls in the range (0-1)
+    let percentage = (value - min) / (max - min);
+    
+    // If inverse is true, flip the percentage (for years - newer = greener)
+    if (inverse) {
+      percentage = 1 - percentage;
+    }
+    
+    // Clamp between 0-1
+    percentage = Math.max(0, Math.min(1, percentage));
+    
+    // Generate RGB values for a red-to-green gradient
+    const r = Math.round(255 * (1 - percentage));
+    const g = Math.round(255 * percentage);
     const b = 0;
-    return `rgba(${r}, ${g}, ${b}, 0.2)`;
+    
+    // Determine text color based on background brightness
+    // Use black text on light backgrounds, white text on dark backgrounds
+    const brightness = (r * 299 + g * 587 + b * 114) / 1000; // Perceived brightness formula
+    const textColor = brightness > 128 ? '#000000' : '#ffffff';
+    
+    // Return both background color and text color
+    return { 
+      bg: `rgba(${r}, ${g}, ${b}, 0.7)`, 
+      text: textColor 
+    };
   };
 
   return (
@@ -220,25 +244,39 @@ export default function ListAll() {
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-900">{entry.authors}</td>
                     <td 
-                      className="px-6 py-4 text-sm text-gray-900"
+                      className="px-6 py-4 text-sm font-medium"
                       style={{
                         backgroundColor: getGradientColor(
                           parseInt(entry.year),
                           yearStats.min,
-                          yearStats.max
-                        )
+                          yearStats.max,
+                          true // Inverse for years (newer = greener)
+                        ).bg,
+                        color: getGradientColor(
+                          parseInt(entry.year),
+                          yearStats.min,
+                          yearStats.max,
+                          true
+                        ).text
                       }}
                     >
                       {entry.year}
                     </td>
                     <td 
-                      className="px-6 py-4 text-sm text-gray-900"
+                      className="px-6 py-4 text-sm font-medium"
                       style={{
                         backgroundColor: getGradientColor(
                           entry.citations,
                           citationStats.min,
-                          citationStats.max
-                        )
+                          citationStats.max,
+                          false // Not inverse for citations (more = greener)
+                        ).bg,
+                        color: getGradientColor(
+                          entry.citations,
+                          citationStats.min,
+                          citationStats.max,
+                          false
+                        ).text
                       }}
                     >
                       {entry.citations.toLocaleString()}

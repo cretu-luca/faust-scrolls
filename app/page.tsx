@@ -1,231 +1,428 @@
-'use client';
-import { useState, ChangeEvent, FormEvent } from 'react';
-import { useRouter } from 'next/navigation';
-import { useLibrary } from './context/LibraryContext';
+"use client";
+import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { api } from "./services/api";
+import { Article } from "./types/article";
 
-interface ValidationErrors {
-  citations?: string;
-  year?: string;
-}
-
-interface Entry {
-  title: string;
-  authors: string;
-  journal: string;
-  citations: number;
-  year: string;
-  abstract: string;
-  domain?: string;
-  coordinates?: {
-    x: number;
-    y: number;
-  };
-}
+type SortField = 'original' | 'year' | 'citations';
+type SortOrder = 'asc' | 'desc';
 
 export default function Home() {
   const router = useRouter();
-  const { addEntry, isLoading } = useLibrary();
-  const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
+  const [articles, setArticles] = useState<Article[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortField, setSortField] = useState<SortField>('original');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
+  const [yearFilter, setYearFilter] = useState<string>("");
 
-  const [formData, setFormData] = useState<Entry>({
-    title: '',
-    authors: '',
-    domain: '',
-    citations: 0,
-    year: '',
-    journal: '',
-    abstract: ''
-  });
+  const itemsPerPage = 10;
 
-  const validateForm = (): boolean => {
-    const errors: ValidationErrors = {};
+  useEffect(() => {
+    fetchArticles();
+  }, []);
 
-    if (!/^\d+$/.test(String(formData.citations))) {
-      errors.citations = 'Citations must be a valid integer';
+  useEffect(() => {
+    if (sortField !== 'original') {
+      applySorting();
     }
+  }, [sortField, sortOrder]);
 
-    if (!/^\d+$/.test(formData.year)) {
-      errors.year = 'Year must be a valid integer';
-    } else {
-      const year = parseInt(formData.year);
-      if (year < 0 || year > new Date().getFullYear()) {
-        errors.year = 'Please enter a valid year';
+  const applySorting = async () => {
+    try {
+      setIsLoading(true);
+      if (sortField === 'original') {
+        await fetchArticles();
+      } else {
+        const data = await api.articles.getSorted(sortField, sortOrder);
+        setArticles(data);
       }
-    }
-
-    setValidationErrors(errors);
-    return Object.keys(errors).length === 0;
-  };
-
-  const handleChange = (
-    e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
-    const { name, value } = e.target;
-    setFormData((prev: Entry) => ({
-      ...prev,
-      [name]: name === 'citations' ? (parseInt(value) || 0) : value
-    }));
-    
-    if (validationErrors[name as keyof ValidationErrors]) {
-      setValidationErrors({
-        ...validationErrors,
-        [name]: undefined,
-      });
+    } catch (err) {
+      console.error('Failed to sort articles:', err);
+      setError('Failed to sort articles. Please try again later.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+  const fetchArticles = async (year?: number) => {
+    try {
+      setIsLoading(true);
+      let data: Article[];
+      
+      if (year) {
+        data = await api.articles.getByYear(year);
+      } else {
+        data = await api.articles.getAll();
+      }
+      
+      setArticles(data);
+      setCurrentPage(1);
+      setError(null);
+    } catch (err) {
+      console.error('Failed to fetch articles:', err);
+      setError('Failed to load articles. Please try again later.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSearchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (validateForm()) {
-      addEntry(formData);
-      setFormData({
-        title: '',
-        authors: '',
-        domain: '',
-        citations: 0,
-        year: '',
-        journal: '',
-        abstract: ''
-      });
-      setValidationErrors({});
+    
+    if (searchQuery.trim()) {
+      try {
+        setIsLoading(true);
+        console.log("Searching for:", searchQuery);
+        const data = await api.articles.search(searchQuery);
+        setArticles(data);
+        setCurrentPage(1);
+      } catch (err) {
+        console.error('Failed to search articles:', err);
+        setError('Failed to search articles. Please try again later.');
+      } finally {
+        setIsLoading(false);
+      }
+    } else {
+      // If search query is empty, fetch all articles
+      fetchArticles();
     }
   };
+
+  const handleYearFilterSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    const yearValue = parseInt(yearFilter);
+    if (!isNaN(yearValue)) {
+      await fetchArticles(yearValue);
+    } else if (yearFilter === "") {
+      await fetchArticles();
+    }
+  };
+
+  // After the useEffect blocks, add the color utility function
+  const getGradientColor = (value: number, min: number, max: number, inverse: boolean = false) => {
+    // Prevent division by zero
+    if (min === max) return { bg: 'rgba(255, 255, 0, 0.3)', text: '#000000' }; 
+    
+    // Calculate where the value falls in the range (0-1)
+    let percentage = (value - min) / (max - min);
+    
+    // If inverse is true, flip the percentage (for years - newer = greener)
+    if (inverse) {
+      percentage = 1 - percentage;
+    }
+    
+    // Clamp between 0-1
+    percentage = Math.max(0, Math.min(1, percentage));
+    
+    // Generate RGB values for a red-to-green gradient
+    const r = Math.round(255 * (1 - percentage));
+    const g = Math.round(255 * percentage);
+    const b = 0;
+    
+    // Determine text color based on background brightness
+    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+    const textColor = brightness > 128 ? '#000000' : '#ffffff';
+    
+    // Return both background color and text color
+    return { 
+      bg: `rgba(${r}, ${g}, ${b}, 0.7)`, 
+      text: textColor 
+    };
+  };
+
+  // Calculate min/max values for year and citations
+  const yearStats = articles.reduce((stats, article) => ({
+    min: Math.min(stats.min, article.year),
+    max: Math.max(stats.max, article.year)
+  }), { min: Infinity, max: -Infinity });
+
+  const citationStats = articles.reduce((stats, article) => ({
+    min: Math.min(stats.min, article.citations),
+    max: Math.max(stats.max, article.citations)
+  }), { min: Infinity, max: -Infinity });
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#FFF5E5]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
+      <div className="min-h-screen bg-[#FFF5E5] p-6">
+        <div className="max-w-3xl mx-auto">
+          <div className="animate-pulse">
+            <div className="h-8 bg-gray-200 rounded w-1/4 mb-4"></div>
+            <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+            <div className="h-4 bg-gray-200 rounded w-1/2 mb-4"></div>
+            <div className="h-32 bg-gray-200 rounded mb-4"></div>
+          </div>
+        </div>
       </div>
     );
   }
 
+  if (error) {
+    return (
+      <div className="min-h-screen bg-[#FFF5E5] p-6">
+        <div className="max-w-3xl mx-auto">
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+            <strong className="font-bold">Error: </strong>
+            <span className="block sm:inline">{error}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const totalPages = Math.ceil(articles.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const displayedArticles = articles.slice(startIndex, startIndex + itemsPerPage);
+
   return (
-    <div className="min-h-screen bg-[#FFF5E5] flex items-center">
-      <div className="container mx-auto px-4">
-        <div className="max-w-xl mx-auto">
-          {/* Form Section */}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <form className="max-w-md mx-auto" onSubmit={handleSubmit}>
-              <h1 className="text-2xl font-bold text-center mb-4 text-black">Expanding Faust&apos;s Library</h1>
-              
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
-                  <input 
-                    type="text" 
-                    name="title"
-                    placeholder="Enter title" 
-                    value={formData.title}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 border rounded text-gray-900 font-joan"
-                    required
-                  />
-                </div>
+    <div className="p-6 bg-[#FFF5E5] min-h-screen">
+      <div className="mb-6 flex justify-between items-center">
+        <div className="flex items-center gap-4">
+          <h1 className="text-3xl font-bold text-gray-900">Article Library</h1>
+          <button
+            onClick={() => router.push('/add')}
+            className="bg-[#E5EFFF] text-gray-800 px-8 py-4 rounded-lg text-lg font-bold shadow-lg hover:bg-blue-100 transition-colors transform hover:scale-105 border-2 border-blue-200"
+          >
+            Add article
+          </button>
+        </div>
+        <div className="flex gap-4">
+          <button
+            onClick={() => router.push('/visualization')}
+            className="bg-[#E5EFFF] text-gray-800 px-4 py-2 rounded hover:bg-blue-100 transition-colors"
+          >
+            View Visualization
+          </button>
+        </div>
+      </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Author</label>
-                  <input 
-                    type="text" 
-                    name="authors"
-                    placeholder="Enter author" 
-                    value={formData.authors}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 border rounded text-gray-900 font-joan"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Domain</label>
-                  <input 
-                    type="text" 
-                    name="domain"
-                    placeholder="Enter domain" 
-                    value={formData.domain}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 border rounded text-gray-900 font-joan"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Citations</label>
-                  <input 
-                    type="text" 
-                    name="citations"
-                    placeholder="Enter number of citations" 
-                    value={formData.citations}
-                    onChange={handleChange}
-                    className={`w-full px-3 py-2 border rounded text-gray-900 font-joan ${
-                      validationErrors.citations ? 'border-red-500' : ''
-                    }`}
-                    required
-                  />
-                  {validationErrors.citations && (
-                    <p className="mt-1 text-sm text-red-500">{validationErrors.citations}</p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Year</label>
-                  <input 
-                    type="text" 
-                    name="year"
-                    placeholder="Enter year of publication" 
-                    value={formData.year}
-                    onChange={handleChange}
-                    className={`w-full px-3 py-2 border rounded text-gray-900 font-joan ${
-                      validationErrors.year ? 'border-red-500' : ''
-                    }`}
-                    required
-                  />
-                  {validationErrors.year && (
-                    <p className="mt-1 text-sm text-red-500">{validationErrors.year}</p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Journal</label>
-                  <input 
-                    type="text" 
-                    name="journal"
-                    placeholder="Enter journal" 
-                    value={formData.journal}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 border rounded text-gray-900 font-joan"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Abstract</label>
-                  <textarea 
-                    name="abstract"
-                    placeholder="Enter abstract" 
-                    value={formData.abstract}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 border rounded text-gray-900 font-joan h-32 resize-none"
-                    required
-                  />
-                </div>
+      <div className="flex gap-6">
+        {/* Left sidebar with search and filters */}
+        <div className="w-1/3 space-y-4">
+          <div className="bg-white p-4 rounded-lg shadow-md">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Search & Filters</h2>
+            <div className="space-y-4">
+              <div>
+                <form onSubmit={handleSearchSubmit}>
+                  <label className="block text-sm font-medium text-gray-900 mb-1">
+                    Search Articles
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    <input
+                      type="text"
+                      placeholder="Title, author, abstract, or journal..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="flex-1 min-w-[60%] p-3 border-2 border-gray-400 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-gray-50 text-gray-900 placeholder-gray-600"
+                    />
+                    <div className="flex gap-1">
+                      <button
+                        type="submit"
+                        disabled={!searchQuery.trim()}
+                        className="px-3 py-2 bg-[#E5EFFF] text-gray-800 rounded-lg hover:bg-blue-100 transition-colors disabled:opacity-50"
+                      >
+                        Search
+                      </button>
+                      {searchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSearchQuery("");
+                            fetchArticles();
+                          }}
+                          className="px-3 py-2 bg-[#E5EFFF] text-gray-800 rounded-lg hover:bg-blue-100 transition-colors flex items-center justify-center"
+                          title="Clear search"
+                        >
+                          &times;
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </form>
               </div>
 
-              <div className="flex space-x-4 justify-center pt-4 mt-6">
-                <button 
-                  type="submit"
-                  className="bg-[#E5EFFF] text-gray-800 py-2 px-6 rounded hover:bg-[#d5e3fa] transition-colors font-joan"
-                > 
-                  Add to library 
-                </button>
-                <button 
-                  type="button"
-                  onClick={() => router.push('/listAll')}
-                  className="bg-gray-200 text-gray-800 py-2 px-6 rounded hover:bg-gray-300 transition-colors"
+              <div>
+                <form onSubmit={handleYearFilterSubmit}>
+                  <label className="block text-sm font-medium text-gray-900 mb-1">
+                    Filter by Year
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    <input
+                      type="text"
+                      placeholder="Enter year..."
+                      value={yearFilter}
+                      onChange={(e) => setYearFilter(e.target.value)}
+                      className="flex-1 min-w-[60%] p-3 border-2 border-gray-400 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-gray-50 text-gray-900 placeholder-gray-600"
+                    />
+                    <div className="flex gap-1">
+                      <button
+                        type="submit"
+                        className="px-3 py-2 bg-[#E5EFFF] text-gray-800 rounded-lg hover:bg-blue-100 transition-colors"
+                      >
+                        Apply
+                      </button>
+                      {yearFilter && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setYearFilter("");
+                            fetchArticles();
+                          }}
+                          className="px-3 py-2 bg-[#E5EFFF] text-gray-800 rounded-lg hover:bg-blue-100 transition-colors flex items-center justify-center"
+                          title="Clear year filter"
+                        >
+                          &times;
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+              {/* Add sorting controls */}
+              <div>
+                <label className="block text-sm font-medium text-gray-900 mb-1">
+                  Sort Articles
+                </label>
+                <div className="flex gap-2">
+                  <select
+                    value={sortField}
+                    onChange={(e) => {
+                      setSortField(e.target.value as SortField);
+                      // Clear search and year filters when sorting changes
+                      if (searchQuery) setSearchQuery("");
+                      if (yearFilter) setYearFilter("");
+                    }}
+                    className="flex-1 p-3 border-2 border-gray-400 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-gray-50 text-gray-900"
+                  >
+                    <option value="original">Original Order</option>
+                    <option value="year">By Year</option>
+                    <option value="citations">By Citations</option>
+                  </select>
+                  <button
+                    onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                    className="px-4 py-2 border-2 border-blue-200 rounded-lg bg-[#E5EFFF] hover:bg-blue-100 text-gray-800"
+                    title={sortOrder === 'asc' ? 'Sort Ascending' : 'Sort Descending'}
+                  >
+                    {sortOrder === 'asc' ? '↑' : '↓'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Main content area */}
+        <div className="flex-1">
+          <div className="bg-white rounded-lg shadow overflow-hidden">
+            <table className="min-w-full">
+              <thead>
+                <tr className="bg-gray-50">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                    Title
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                    Authors
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                    Year
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                    Citations
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+              {displayedArticles.map((article, index) => (
+                <tr 
+                  key={`${article.title}-${index}`}
+                  className="hover:bg-gray-50 cursor-pointer"
+                  onClick={() => {
+                    console.log("Navigating to article with index:", article.index);
+                    router.push(`/details/${article.index}`);
+                  }}
                 >
-                  View Library
-                </button>
-              </div>
-            </form>
+                  <td className="px-6 py-4">
+                    <div className="text-sm font-medium text-gray-900">{article.title}</div>
+                    <div className="text-sm text-gray-600">{article.journal}</div>
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-900">{article.authors}</td>
+                  <td 
+                    className="px-6 py-4 text-sm font-medium"
+                    style={{
+                      backgroundColor: getGradientColor(
+                        article.year,
+                        yearStats.min,
+                        yearStats.max,
+                        true // Inverse for years (newer = greener)
+                      ).bg,
+                      color: getGradientColor(
+                        article.year,
+                        yearStats.min,
+                        yearStats.max,
+                        true
+                      ).text
+                    }}
+                  >
+                    {article.year}
+                  </td>
+                  <td 
+                    className="px-6 py-4 text-sm font-medium"
+                    style={{
+                      backgroundColor: getGradientColor(
+                        article.citations,
+                        citationStats.min,
+                        citationStats.max,
+                        false // Not inverse for citations (more = greener)
+                      ).bg,
+                      color: getGradientColor(
+                        article.citations,
+                        citationStats.min,
+                        citationStats.max,
+                        false
+                      ).text
+                    }}
+                  >
+                    {article.citations.toLocaleString()}
+                  </td>
+                </tr>
+              ))}
+                {displayedArticles.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-8 text-center text-gray-500">
+                      No articles found.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination - fixed version */}
+          <div className="mt-4 flex justify-between items-center">
+            <div className="text-sm text-gray-900">
+              Showing {articles.length > 0 ? startIndex + 1 : 0} to {Math.min(startIndex + itemsPerPage, articles.length)} of {articles.length} results
+            </div>
+            <div className="space-x-2">
+              <button
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1 border rounded text-sm text-gray-800 bg-[#E5EFFF] disabled:opacity-50 hover:bg-blue-100"
+              >
+                Previous
+              </button>
+              <span className="px-3 py-1 text-gray-900">Page {currentPage} of {totalPages || 1}</span>
+              <button
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages || totalPages === 0}
+                className="px-3 py-1 border rounded text-sm text-gray-800 bg-[#E5EFFF] disabled:opacity-50 hover:bg-blue-100"
+              >
+                Next
+              </button>
+            </div>
           </div>
         </div>
       </div>

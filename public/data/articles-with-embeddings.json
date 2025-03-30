@@ -270,10 +270,10 @@
     "abstract": "  The quadratic pion scalar radius, \\la r^2\\ra^\\pi_s, plays an important role\nfor present precise determinations of \\pi\\pi scattering. Recently, Yndur\\'ain,\nusing an Omn\\`es representation of the null isospin(I) non-strange pion scalar\nform factor, obtains \\la r^2\\ra^\\pi_s=0.75\\pm 0.07 fm^2. This value is larger\nthan the one calculated by solving the corresponding Muskhelishvili-Omn\\`es\nequations, \\la r^2\\ra^\\pi_s=0.61\\pm 0.04 fm^2. A large discrepancy between both\nvalues, given the precision, then results. We reanalyze Yndur\\'ain's method and\nshow that by imposing continuity of the resulting pion scalar form factor under\ntiny changes in the input \\pi\\pi phase shifts, a zero in the form factor for\nsome S-wave I=0 T-matrices is then required. Once this is accounted for, the\nresulting value is \\la r^2\\ra_s^\\pi=0.65\\pm 0.05 fm^2. The main source of error\nin our determination is present experimental uncertainties in low energy S-wave\nI=0 \\pi\\pi phase shifts. Another important contribution to our error is the not\nyet settled asymptotic behaviour of the phase of the scalar form factor from\nQCD.\n",
     "year": "2008",
     "citations": 9274,
-    "coordinates": {
-      "x": 18.86640167236328,
-      "y": -19.862783432006836
-    }
+      "coordinates": {
+        "x": 18.86640167236328,
+        "y": -19.862783432006836
+      }
   },
   {
     "authors": "R.A. Brownlee, A.N. Gorban, J. Levesley",
