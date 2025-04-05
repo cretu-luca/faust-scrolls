@@ -24,3 +24,56 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Custom animations for offline status */
+@keyframes attention-flash {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(0, 0, 0, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 10px 0 rgba(0, 0, 0, 0.3);
+  }
+}
+
+@keyframes slide-in-down {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+@keyframes subtle-bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+.attention-flash {
+  animation: attention-flash 2s ease-in-out infinite;
+}
+
+.slide-in-down {
+  animation: slide-in-down 0.3s ease-out forwards;
+}
+
+.subtle-bounce {
+  animation: subtle-bounce 2s ease-in-out infinite;
+}
+
+/* Animation delay utilities */
+.delay-100 {
+  animation-delay: 100ms;
+}
+
+.delay-200 {
+  animation-delay: 200ms;
+}
+
+.delay-300 {
+  animation-delay: 300ms;
+}

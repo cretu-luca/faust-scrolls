@@ -2,6 +2,8 @@
 import React, { useState, useEffect, ChangeEvent, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '../../services/api';
+import { memoryStorageService } from '../../services/memoryStorageService';
+import { shouldUseLocalStorage } from '../../services/connectivityService';
 
 type Params = { id: string };
 
@@ -26,6 +28,8 @@ export default function EditArticle({ params }: { params: Params | Promise<Param
   const [isLoading, setIsLoading] = useState(true);
   const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isOfflineMode, setIsOfflineMode] = useState(false);
+  const [isOfflineArticle, setIsOfflineArticle] = useState(false);
 
   const [formData, setFormData] = useState<ArticleInput>({
     title: '',
@@ -40,32 +44,88 @@ export default function EditArticle({ params }: { params: Params | Promise<Param
     const fetchArticle = async () => {
       try {
         setIsLoading(true);
-        const index = parseInt(resolvedParams.id);
+        const articleId = resolvedParams.id;
+        
+        // Check if we're in offline mode
+        const offline = shouldUseLocalStorage();
+        setIsOfflineMode(offline);
+        
+        // Check if the ID is a temporary ID (starts with "temp-")
+        if (articleId.startsWith('temp-')) {
+          setIsOfflineArticle(true);
+          
+          // Try to get it from memory storage by ID
+          const memoryArticles = memoryStorageService.getArticles();
+          const foundArticle = memoryArticles.find(a => a.id === articleId);
+          
+          if (foundArticle) {
+            setFormData({
+              title: foundArticle.title,
+              authors: foundArticle.authors,
+              journal: foundArticle.journal,
+              citations: foundArticle.citations,
+              year: foundArticle.year,
+              abstract: foundArticle.abstract
+            });
+            return;
+          } else {
+            setSubmitError("Article not found in offline storage");
+            return;
+          }
+        }
+        
+        // Try to parse as numeric index
+        const index = parseInt(articleId);
         
         if (isNaN(index) || index < 0) {
           setSubmitError("Invalid article ID");
           return;
         }
         
-        console.log("Fetching article with index:", index);
-        const article = await api.articles.getByIndex(index);
-        console.log("Fetched article for editing:", article);
-        
-        setFormData({
-          title: article.title,
-          authors: article.authors,
-          journal: article.journal,
-          citations: article.citations,
-          year: article.year,
-          abstract: article.abstract
-        });
-        
-      } catch (err) {
-        console.error('Failed to fetch article:', err);
-        if ((err as any).status === 404) {
-          setSubmitError('Article not found');
-        } else {
-          setSubmitError('Failed to load article. Please try again later.');
+        // Try API first, fall back to memory storage if offline
+        try {
+          console.log("Fetching article with index:", index);
+          const article = await api.articles.getByIndex(index);
+          console.log("Fetched article for editing:", article);
+          
+          setFormData({
+            title: article.title,
+            authors: article.authors,
+            journal: article.journal,
+            citations: article.citations,
+            year: article.year,
+            abstract: article.abstract
+          });
+        } catch (err) {
+          // If we're offline, try memory storage
+          if (offline) {
+            const memoryArticle = memoryStorageService.getArticleByIndex(index);
+            if (memoryArticle) {
+              setFormData({
+                title: memoryArticle.title,
+                authors: memoryArticle.authors,
+                journal: memoryArticle.journal,
+                citations: memoryArticle.citations,
+                year: memoryArticle.year,
+                abstract: memoryArticle.abstract
+              });
+            } else {
+              console.error('Failed to fetch article:', err);
+              if ((err as any).status === 404) {
+                setSubmitError('Article not found');
+              } else {
+                setSubmitError('Failed to load article. Please try again later.');
+              }
+            }
+          } else {
+            // Not offline, so just show the error
+            console.error('Failed to fetch article:', err);
+            if ((err as any).status === 404) {
+              setSubmitError('Article not found');
+            } else {
+              setSubmitError('Failed to load article. Please try again later.');
+            }
+          }
         }
       } finally {
         setIsLoading(false);
@@ -120,21 +180,53 @@ export default function EditArticle({ params }: { params: Params | Promise<Param
       try {
         setIsSubmitting(true);
         
-        console.log(`Attempting to update article with index: ${resolvedParams.id}`);
+        console.log(`Attempting to update article with ID: ${resolvedParams.id}`);
         
         await api.articles.update(resolvedParams.id, formData);
         
         router.push('/');
       } catch (error) {
         console.error('Error updating article:', error);
-        const errorDetail = (error as any)?.message || '';
         
-        if (errorDetail.includes('Article with index')) {
-          setSubmitError(`The article you're trying to edit (index ${resolvedParams.id}) could not be found. It may have been deleted or there might be an issue with the index.`);
-        } else if (errorDetail.includes('Article with ID')) {
-          setSubmitError(`The article with ID ${resolvedParams.id} could not be found. It may have been deleted.`);
+        // If we're in offline mode, update in memory storage
+        if (isOfflineMode) {
+          try {
+            if (resolvedParams.id.startsWith('temp-')) {
+              // Update using ID for temp articles
+              memoryStorageService.updateArticle(resolvedParams.id, formData);
+            } else {
+              // Try to find by index
+              const index = parseInt(resolvedParams.id);
+              if (!isNaN(index)) {
+                const article = memoryStorageService.getArticleByIndex(index);
+                if (article && article.id) {
+                  memoryStorageService.updateArticle(article.id, formData);
+                } else {
+                  throw new Error("Could not find article to update");
+                }
+              } else {
+                throw new Error("Invalid article ID for local update");
+              }
+            }
+            
+            // Success, navigate back
+            router.push('/');
+            return;
+          } catch (localError) {
+            console.error('Error updating article in memory storage:', localError);
+            setSubmitError('Failed to update article in offline mode.');
+          }
         } else {
-          setSubmitError('Failed to update article. Please try again later.');
+          // Standard online error handling
+          const errorDetail = (error as any)?.message || '';
+          
+          if (errorDetail.includes('Article with index')) {
+            setSubmitError(`The article you're trying to edit (index ${resolvedParams.id}) could not be found. It may have been deleted or there might be an issue with the index.`);
+          } else if (errorDetail.includes('Article with ID')) {
+            setSubmitError(`The article with ID ${resolvedParams.id} could not be found. It may have been deleted.`);
+          } else {
+            setSubmitError('Failed to update article. Please try again later.');
+          }
         }
       } finally {
         setIsSubmitting(false);
@@ -165,7 +257,12 @@ export default function EditArticle({ params }: { params: Params | Promise<Param
         {/* Form Section */}
         <div className="bg-white rounded-lg shadow-md p-6">
           <form onSubmit={handleSubmit}>
-            <h1 className="text-2xl font-bold text-center mb-6 text-gray-900">Edit Article</h1>
+            <div className="flex items-center justify-center mb-6">
+              <h1 className="text-2xl font-bold text-center text-gray-900">Edit Article</h1>
+              {isOfflineArticle && (
+                <span className="ml-2 px-2 py-1 bg-red-200 text-black text-xs rounded">Offline</span>
+              )}
+            </div>
             
             {submitError && (
               <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md">

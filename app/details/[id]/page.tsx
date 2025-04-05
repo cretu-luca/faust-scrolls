@@ -2,6 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '../../services/api';
+import { memoryStorageService } from '../../services/memoryStorageService';
+import { shouldUseLocalStorage } from '../../services/connectivityService';
 import { Article } from '../../types/article';
 
 type Params = { id: string };
@@ -14,29 +16,77 @@ export default function Details({ params }: { params: Params | Promise<Params> }
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isOfflineMode, setIsOfflineMode] = useState(false);
 
   useEffect(() => {
     const fetchArticle = async () => {
       try {
         setIsLoading(true);
-        const index = parseInt(resolvedParams.id);
+        const articleId = resolvedParams.id;
+        
+        // Check if we're in offline mode
+        const offline = shouldUseLocalStorage();
+        setIsOfflineMode(offline);
+        
+        // Check if the ID is a temporary ID (starts with "temp-")
+        if (articleId.startsWith('temp-')) {
+          // This is an offline-added article with a temporary ID
+          if (offline) {
+            // Try to get it from memory storage by ID
+            const memoryArticles = memoryStorageService.getArticles();
+            const foundArticle = memoryArticles.find(a => a.id === articleId);
+            
+            if (foundArticle) {
+              setArticle(foundArticle);
+              setError(null);
+              return;
+            } else {
+              setError("Article not found in offline storage");
+              return;
+            }
+          } else {
+            setError("Cannot find article: It was added offline and hasn't been synced yet");
+            return;
+          }
+        }
+        
+        // Try to parse as numeric index
+        const index = parseInt(articleId);
         
         if (isNaN(index) || index < 0) {
           setError("Invalid article ID");
           return;
         }
         
-        console.log("Fetching article with index:", index);
-        const article = await api.articles.getByIndex(index);
-        console.log("Fetched article:", article);
-        setArticle(article);
-        setError(null);
-      } catch (err) {
-        console.error('Failed to fetch article:', err);
-        if ((err as any).status === 404) {
-          setError('Article not found');
-        } else {
-          setError('Failed to load article. Please try again later.');
+        // Try API first, fall back to memory storage if offline
+        try {
+          console.log("Fetching article with index:", index);
+          const apiArticle = await api.articles.getByIndex(index);
+          console.log("Fetched article:", apiArticle);
+          setArticle(apiArticle);
+          setError(null);
+        } catch (err) {
+          // If we're offline or the API failed, try memory storage
+          if (offline) {
+            const memoryArticle = memoryStorageService.getArticleByIndex(index);
+            if (memoryArticle) {
+              setArticle(memoryArticle);
+              setError(null);
+            } else {
+              if ((err as any).status === 404) {
+                setError('Article not found');
+              } else {
+                setError('Failed to load article. Please try again later.');
+              }
+            }
+          } else {
+            // Not offline, so just show the error
+            if ((err as any).status === 404) {
+              setError('Article not found');
+            } else {
+              setError('Failed to load article. Please try again later.');
+            }
+          }
         }
       } finally {
         setIsLoading(false);
@@ -48,7 +98,9 @@ export default function Details({ params }: { params: Params | Promise<Params> }
 
   const handleEdit = () => {
     if (article) {
-      router.push(`/edit/${article.index}`);
+      // Use ID for temporary articles, index for regular ones
+      const editId = article.id?.startsWith('temp-') ? article.id : article.index.toString();
+      router.push(`/edit/${editId}`);
     }
   };
 
@@ -60,7 +112,11 @@ export default function Details({ params }: { params: Params | Promise<Params> }
 
     try {
       setIsDeleting(true);
-      await api.articles.delete(article.index.toString());
+      
+      // Use ID for temporary articles, index for regular ones
+      const deleteId = article.id?.startsWith('temp-') ? article.id : article.index.toString();
+      
+      await api.articles.delete(deleteId);
       router.push('/');
     } catch (err) {
       console.error('Failed to delete article:', err);
@@ -113,6 +169,9 @@ export default function Details({ params }: { params: Params | Promise<Params> }
             Back to Library
           </button>
           <div className="space-x-2">
+            {isOfflineMode && article.id?.startsWith('temp-') && (
+              <span className="px-2 py-1 bg-red-200 text-black text-sm rounded">Offline Article</span>
+            )}
             <button
               onClick={handleEdit}
               className="bg-[#E5EFFF] text-gray-800 px-4 py-2 rounded hover:bg-blue-100 transition-colors"

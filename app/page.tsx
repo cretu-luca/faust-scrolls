@@ -3,6 +3,8 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "./services/api";
 import { Article } from "./types/article";
+import { memoryStorageService } from "./services/memoryStorageService";
+import { useConnectivityStore, shouldUseLocalStorage } from "./services/connectivityService";
 
 type SortField = 'original' | 'year' | 'citations';
 type SortOrder = 'asc' | 'desc';
@@ -17,12 +19,104 @@ export default function Home() {
   const [sortField, setSortField] = useState<SortField>('original');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
   const [yearFilter, setYearFilter] = useState<string>("");
+  const [isOffline, setIsOffline] = useState(false);
 
   const itemsPerPage = 10;
+
+  // Initialize connectivity monitoring and memory storage
+  useEffect(() => {
+    // Initialize memory storage with sample data for offline use
+    memoryStorageService.initializeIfEmpty();
+    
+    const unsubscribe = useConnectivityStore.subscribe((state) => {
+      const offline = !state.isOnline || !state.isServerAvailable;
+      setIsOffline(offline);
+    });
+    
+    return () => {
+      unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     fetchArticles();
   }, []);
+
+  // Effect for handling online/offline transitions
+  useEffect(() => {
+    // When coming back online, try to sync changes and refresh data
+    if (!isOffline) {
+      syncAndRefresh();
+    } else {
+      // When going offline, make sure we have local data
+      ensureLocalData();
+    }
+  }, [isOffline]);
+
+  const ensureLocalData = () => {
+    // Initialize memory storage with sample data if needed
+    memoryStorageService.initializeIfEmpty();
+    
+    // If we have no articles loaded but have memory data, load it
+    if (articles.length === 0) {
+      const memoryArticles = memoryStorageService.getArticles();
+      if (memoryArticles.length > 0) {
+        setArticles(memoryArticles);
+        setError(null);
+      }
+    }
+  };
+
+  const syncAndRefresh = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Always clear any existing state first
+      setArticles([]);
+      
+      // 1. Check if we have any pending operations first
+      const pendingOps = memoryStorageService.getPendingOperations();
+      const hasPendingOps = pendingOps.length > 0;
+      
+      if (hasPendingOps) {
+        // If we have pending operations, sync them first
+        console.log(`Syncing ${pendingOps.length} pending operations`);
+        await api.articles.syncPendingOperations();
+      }
+      
+      // Always fetch fresh data from server after potentially syncing
+      try {
+        const serverArticles = await api.articles.getAll();
+        console.log(`Retrieved ${serverArticles.length} articles from server`);
+        setArticles(serverArticles);
+        setCurrentPage(1);
+        setError(null);
+      } catch (error) {
+        console.error('Failed to fetch articles from server:', error);
+        
+        // If we can't get server data, use memory as fallback
+        const memoryArticles = memoryStorageService.getArticles();
+        if (memoryArticles.length > 0) {
+          setArticles(memoryArticles);
+          setCurrentPage(1);
+        } else {
+          setError('Failed to load articles. No offline data available.');
+        }
+      }
+    } catch (error) {
+      console.error("Failed to sync or refresh data:", error);
+      
+      // If sync failed but we have memory data, show it
+      const memoryArticles = memoryStorageService.getArticles();
+      if (memoryArticles.length > 0) {
+        setArticles(memoryArticles);
+      } else {
+        setError('Failed to sync or load articles.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (sortField !== 'original') {
@@ -42,6 +136,17 @@ export default function Home() {
     } catch (err) {
       console.error('Failed to sort articles:', err);
       setError('Failed to sort articles. Please try again later.');
+      
+      // Try memory storage as fallback
+      if (shouldUseLocalStorage()) {
+        try {
+          const localData = memoryStorageService.getSortedArticles(sortField, sortOrder);
+          setArticles(localData);
+          setError(null);
+        } catch (localErr) {
+          console.error('Failed to sort articles from memory storage:', localErr);
+        }
+      }
     } finally {
       setIsLoading(false);
     }
@@ -61,9 +166,40 @@ export default function Home() {
       setArticles(data);
       setCurrentPage(1);
       setError(null);
+      
+      // Update memory storage with the latest data
+      if (data.length > 0) {
+        memoryStorageService.saveArticles(data);
+      }
     } catch (err) {
       console.error('Failed to fetch articles:', err);
-      setError('Failed to load articles. Please try again later.');
+      
+      // If we're offline, try to load from memory storage as fallback
+      if (shouldUseLocalStorage()) {
+        try {
+          let localData: Article[];
+          if (year) {
+            localData = memoryStorageService.getArticlesByYear(year);
+          } else {
+            localData = memoryStorageService.getArticles();
+          }
+          
+          if (localData.length > 0) {
+            setArticles(localData);
+            setCurrentPage(1);
+            setError(null);
+            setIsOffline(true);
+          } else {
+            // If no memory data available, show a more helpful error message
+            setError('No articles available offline. Please reconnect to network or server.');
+          }
+        } catch (localErr) {
+          console.error('Failed to load articles from memory storage:', localErr);
+          setError('Failed to load articles in offline mode. Please reload the page.');
+        }
+      } else {
+        setError('Failed to load articles. Please try again later.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -332,8 +468,12 @@ export default function Home() {
                   key={`${article.title}-${index}`}
                   className="hover:bg-gray-50 cursor-pointer"
                   onClick={() => {
-                    console.log("Navigating to article with index:", article.index);
-                    router.push(`/details/${article.index}`);
+                    // For temporary offline IDs, use the ID, otherwise use the index
+                    const articleId = article.id?.startsWith('temp-') 
+                      ? article.id 
+                      : article.index.toString();
+                    console.log("Navigating to article with ID:", articleId);
+                    router.push(`/details/${articleId}`);
                   }}
                 >
                   <td className="px-6 py-4">
