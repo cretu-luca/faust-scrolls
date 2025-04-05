@@ -5,6 +5,8 @@ import { api } from '../services/api';
 import YearChart from '../components/YearChart';
 import CitationsChart from '../components/CitationsChart';
 import DomainHypergraph from '../components/DomainHypergraph';
+import { Article } from '../types/article';
+import { WebSocketProvider, useWebSocket } from '../context/WebSocketContext';
 
 interface ValidationErrors {
   citations?: string;
@@ -20,13 +22,16 @@ interface ArticleInput {
   abstract: string;
 }
 
-export default function AddArticle() {
+function AddArticleContent() {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [existingArticles, setExistingArticles] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  
+  // Use the WebSocket context
+  const { webSocket, isConnected, isGenerating, startGeneration, stopGeneration, lastMessage } = useWebSocket();
 
   const [formData, setFormData] = useState<ArticleInput>({
     title: '',
@@ -64,6 +69,52 @@ export default function AddArticle() {
 
     fetchArticles();
   }, []);
+
+  // Listen for new articles
+  useEffect(() => {
+    if (!webSocket) return;
+    
+    // Create a message handler function
+    const handleMessage = (event: MessageEvent) => {
+      try {
+        const message = JSON.parse(event.data);
+        console.log("WebSocket message received:", message);
+        
+        if (message.type === 'new_article') {
+          console.log("New article received:", message.data);
+          const newArticle = message.data;
+          
+          // Format the article for chart compatibility
+          const formattedArticle = {
+            ...newArticle,
+            year: newArticle.year.toString(),
+            embeddings: newArticle.embeddings || [],
+            coordinates: newArticle.coordinates || { x: 0, y: 0 }
+          };
+          
+          console.log("Adding formatted article to state:", formattedArticle);
+          setExistingArticles(prevArticles => {
+            console.log("Previous articles:", prevArticles.length);
+            const updatedArticles = [...prevArticles, formattedArticle];
+            console.log("New articles length:", updatedArticles.length);
+            return updatedArticles;
+          });
+        }
+      } catch (error) {
+        console.error('Error handling new article:', error);
+      }
+    };
+    
+    // Add the event listener to the WebSocket
+    webSocket.addEventListener('message', handleMessage);
+    console.log("WebSocket message listener added");
+    
+    // Clean up
+    return () => {
+      webSocket.removeEventListener('message', handleMessage);
+      console.log("WebSocket message listener removed");
+    };
+  }, [webSocket]);
 
   const validateForm = (): boolean => {
     const errors: ValidationErrors = {};
@@ -146,17 +197,34 @@ export default function AddArticle() {
     }
   };
 
+  // Handler for starting random article generation
+  const handleStartGeneration = () => {
+    if (isConnected) {
+      startGeneration();
+    } else {
+      setSubmitError('WebSocket connection not available. Please refresh the page.');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#FFF5E5] p-6">
       <div className="max-w-7xl mx-auto">
         <div className="mb-6 flex justify-between items-center">
           <h1 className="text-3xl font-bold text-gray-900">Add New Article</h1>
-          <button 
-            onClick={() => router.push('/')}
-            className="bg-[#E5EFFF] text-gray-800 px-4 py-2 rounded hover:bg-blue-100 transition-colors"
-          >
-            Back to Library
-          </button>
+          <div className="flex space-x-2">
+            <button 
+              onClick={() => router.push('/files')}
+              className="bg-[#E5EFFF] text-gray-800 px-4 py-2 rounded hover:bg-blue-100 transition-colors"
+            >
+              File Management
+            </button>
+            <button 
+              onClick={() => router.push('/')}
+              className="bg-[#E5EFFF] text-gray-800 px-4 py-2 rounded hover:bg-blue-100 transition-colors"
+            >
+              Back to Library
+            </button>
+          </div>
         </div>
         
         <div className="space-y-6">
@@ -278,7 +346,33 @@ export default function AddArticle() {
           
           {/* Charts Section */}
           <div className="space-y-6">
-            <h2 className="text-2xl font-bold text-gray-900">Library Visualizations</h2>
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-bold text-gray-900">Library Visualizations</h2>
+              
+              <div className="space-x-2">
+                {!isGenerating ? (
+                  <button
+                    onClick={handleStartGeneration}
+                    className="bg-[#E5EFFF] text-gray-800 px-4 py-2 rounded hover:bg-blue-100 transition-colors"
+                  >
+                    Generate Random Articles
+                  </button>
+                ) : (
+                  <button
+                    onClick={stopGeneration}
+                    className="bg-red-100 text-red-800 px-4 py-2 rounded hover:bg-red-200 transition-colors"
+                  >
+                    Stop Generation
+                  </button>
+                )}
+              </div>
+            </div>
+            
+            {lastMessage && (
+              <div className="bg-blue-50 text-blue-800 p-3 rounded-md">
+                Status: {lastMessage}
+              </div>
+            )}
             
             {isLoading ? (
               <div className="bg-white p-6 rounded-lg shadow-lg flex items-center justify-center h-40">
@@ -303,5 +397,14 @@ export default function AddArticle() {
         </div>
       </div>
     </div>
+  );
+}
+
+// Wrap the component with the WebSocketProvider
+export default function AddArticle() {
+  return (
+    <WebSocketProvider>
+      <AddArticleContent />
+    </WebSocketProvider>
   );
 }

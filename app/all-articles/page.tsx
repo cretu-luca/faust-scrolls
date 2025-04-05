@@ -239,10 +239,7 @@ export default function AllArticles() {
               >
                 <div className="flex justify-between items-start">
                   <div>
-                    <h2 className="text-lg font-semibold text-gray-900">
-                      <span className="mr-2 px-2 py-0.5 bg-gray-200 text-gray-700 text-sm rounded-full">#{article.index}</span>
-                      {article.title}
-                    </h2>
+                    <h2 className="text-lg font-semibold text-gray-900">{article.title}</h2>
                     <p className="text-sm text-gray-600">{article.authors}</p>
                     <p className="text-sm text-gray-500">{article.journal}, {article.year}</p>
                   </div>

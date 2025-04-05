@@ -323,6 +323,12 @@ export default function Home() {
           >
             View All Articles
           </button>
+          <button
+            onClick={() => router.push('/files')}
+            className="bg-[#E5EFFF] text-gray-800 px-4 py-2 rounded hover:bg-blue-100 transition-colors"
+          >
+            File Management
+          </button>
         </div>
       </div>
 
