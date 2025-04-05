@@ -318,10 +318,10 @@ export default function Home() {
         </div>
         <div className="flex gap-4">
           <button
-            onClick={() => router.push('/visualization')}
+            onClick={() => router.push('/all-articles')}
             className="bg-[#E5EFFF] text-gray-800 px-4 py-2 rounded hover:bg-blue-100 transition-colors"
           >
-            View Visualization
+            View All Articles
           </button>
         </div>
       </div>

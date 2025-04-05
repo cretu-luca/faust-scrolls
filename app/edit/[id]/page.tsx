@@ -46,7 +46,7 @@ export default function EditArticle({ params }: { params: Params | Promise<Param
         setIsLoading(true);
         const articleId = resolvedParams.id;
         
-        // Check if we're in offline mode
+        // Check if we're in offline mode 
         const offline = shouldUseLocalStorage();
         setIsOfflineMode(offline);
         
