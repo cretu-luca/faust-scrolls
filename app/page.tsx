@@ -9,6 +9,29 @@ import { useConnectivityStore, shouldUseLocalStorage } from "./services/connecti
 type SortField = 'original' | 'year' | 'citations';
 type SortOrder = 'asc' | 'desc';
 
+// Custom scrollbar styles for this page only
+const scrollbarStyles = `
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #f3f4f6;
+    border-radius: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: #000000;
+    border-radius: 10px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: #333333;
+  }
+  html {
+    scrollbar-width: thin;
+    scrollbar-color: #000000 #f3f4f6;
+  }
+`;
+
 export default function Home() {
   const router = useRouter();
   const [articles, setArticles] = useState<Article[]>([]);
@@ -306,6 +329,7 @@ export default function Home() {
 
   return (
     <div className="p-6 bg-[#FFF5E5] min-h-screen">
+      <style jsx global>{scrollbarStyles}</style>
       <div className="mb-6 flex justify-between items-center">
         <div className="flex items-center gap-4">
           <h1 className="text-3xl font-bold text-gray-900">Article Library</h1>
@@ -450,7 +474,10 @@ export default function Home() {
 
         {/* Main content area */}
         <div className="flex-1">
-          <div className="bg-white rounded-lg shadow overflow-hidden">
+          <div className="bg-white rounded-lg shadow overflow-hidden" style={{
+            scrollbarWidth: 'thin',
+            scrollbarColor: '#000000 #f3f4f6'
+          }}>
             <table className="min-w-full">
               <thead>
                 <tr className="bg-gray-50">

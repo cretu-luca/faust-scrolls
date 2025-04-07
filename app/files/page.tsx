@@ -276,9 +276,7 @@ export default function Files() {
                     
                     <div className="flex space-x-2">
                       <a 
-                        href={`http://localhost:8000${file.url}`} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
+                        href={`http://localhost:8000/download/${file.filename}`}
                         className="bg-[#E5EFFF] text-gray-800 px-3 py-1 rounded text-sm hover:bg-blue-100 transition-colors"
                       >
                         Download
