@@ -20,12 +20,10 @@ export default function Files() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  // Load files on component mount
   useEffect(() => {
     fetchFiles();
   }, []);
 
-  // Function to fetch the list of files
   const fetchFiles = async () => {
     try {
       const response = await fetch('http://localhost:8000/api/files/list');
@@ -36,14 +34,12 @@ export default function Files() {
     }
   };
 
-  // Handle file selection
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files.length > 0) {
       uploadFile(event.target.files[0]);
     }
   };
 
-  // Handle file upload
   const uploadFile = async (file: File) => {
     setIsUploading(true);
     setUploadProgress(0);
@@ -54,10 +50,8 @@ export default function Files() {
     formData.append('file', file);
     
     try {
-      // Use XMLHttpRequest for upload progress tracking
       const xhr = new XMLHttpRequest();
       
-      // Setup progress tracking
       xhr.upload.addEventListener('progress', (event) => {
         if (event.lengthComputable) {
           const percentComplete = Math.round((event.loaded / event.total) * 100);
@@ -66,7 +60,6 @@ export default function Files() {
         }
       });
       
-      // Create a promise to handle the XHR request
       const uploadPromise = new Promise<any>((resolve, reject) => {
         xhr.open('POST', 'http://localhost:8000/upload/');
         
@@ -91,20 +84,16 @@ export default function Files() {
           reject(new Error('Upload aborted'));
         };
         
-        // Send the file
         xhr.send(formData);
       });
       
-      // Wait for the upload to complete
       const result = await uploadPromise;
       
       console.log('Upload complete:', result);
       setSuccessMessage(`File "${result.filename}" uploaded successfully!`);
       
-      // Refresh file list
       fetchFiles();
       
-      // Clear file input
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -112,21 +101,18 @@ export default function Files() {
       console.error('Error uploading file:', error);
       setUploadError(`Upload failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
-      // Keep progress at 100% for a moment before resetting if not already there
       if (uploadProgress < 100) {
         setUploadProgress(100);
       }
       
       setIsUploading(false);
       
-      // Reset progress after a delay
       setTimeout(() => {
         setUploadProgress(0);
       }, 2000);
     }
   };
 
-  // Handle file deletion
   const deleteFile = async (filename: string) => {
     if (confirm(`Are you sure you want to delete "${filename}"?`)) {
       try {
@@ -140,7 +126,6 @@ export default function Files() {
         
         setSuccessMessage(`File "${filename}" deleted successfully!`);
         
-        // Refresh file list
         fetchFiles();
       } catch (error) {
         console.error('Error deleting file:', error);
@@ -149,7 +134,6 @@ export default function Files() {
     }
   };
 
-  // Format file size for display
   const formatFileSize = (bytes: number): string => {
     if (bytes < 1024) return bytes + ' B';
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
@@ -157,19 +141,16 @@ export default function Files() {
     return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
   };
 
-  // Format date for display
   const formatDate = (timestamp: number): string => {
     return new Date(timestamp * 1000).toLocaleString();
   };
 
-  // Check if file is an image
   const isImage = (filename: string): boolean => {
     const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'];
     const ext = filename.toLowerCase().substring(filename.lastIndexOf('.'));
     return imageExtensions.includes(ext);
   };
 
-  // Check if file is a video
   const isVideo = (filename: string): boolean => {
     const videoExtensions = ['.mp4', '.webm', '.ogg', '.mov', '.avi'];
     const ext = filename.toLowerCase().substring(filename.lastIndexOf('.'));

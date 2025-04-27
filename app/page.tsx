@@ -1,15 +1,17 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "./services/api";
 import { Article } from "./types/article";
 import { memoryStorageService } from "./services/memoryStorageService";
 import { useConnectivityStore, shouldUseLocalStorage } from "./services/connectivityService";
+import LoginModal from './components/LoginModal';
+import UserMenu from './components/UserMenu';
+import { useAuth } from './context/AuthContext';
 
 type SortField = 'original' | 'year' | 'citations';
 type SortOrder = 'asc' | 'desc';
 
-// Custom scrollbar styles for this page only
 const scrollbarStyles = `
   ::-webkit-scrollbar {
     width: 8px;
@@ -43,12 +45,74 @@ export default function Home() {
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
   const [yearFilter, setYearFilter] = useState<string>("");
   const [isOffline, setIsOffline] = useState(false);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const { isAuthenticated } = useAuth();
+  
+  const wsRef = useRef<WebSocket | null>(null);
+  const [wsConnected, setWsConnected] = useState(false);
 
   const itemsPerPage = 10;
 
-  // Initialize connectivity monitoring and memory storage
   useEffect(() => {
-    // Initialize memory storage with sample data for offline use
+    if (typeof window === 'undefined') return;
+    
+    const ws = new WebSocket('ws://localhost:8000/ws');
+    wsRef.current = ws;
+    
+    ws.onopen = () => {
+      console.log('WebSocket connected');
+      setWsConnected(true);
+    };
+    
+    ws.onclose = () => {
+      console.log('WebSocket disconnected');
+      setWsConnected(false);
+    };
+    
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        console.log('Received WebSocket message:', message);
+        
+        if (message.type === 'new_article') {
+          console.log('New article received:', message.data);
+          setArticles(prevArticles => {
+            const exists = prevArticles.some(article => 
+              article.id === message.data.id || 
+              article.index === message.data.index ||
+              (article.title.toLowerCase() === message.data.title.toLowerCase() && 
+               article.authors.toLowerCase() === message.data.authors.toLowerCase())
+            );
+            
+            if (exists) {
+              console.log('Article already exists in state, not adding duplicate');
+              return prevArticles;
+            }
+            
+            return [...prevArticles, message.data];
+          });
+        } 
+        else if (message.type === 'article_updated') {
+          console.log('Article updated:', message.data);
+          setArticles(prevArticles => 
+            prevArticles.map(article => 
+              article.index === message.data.index ? message.data : article
+            )
+          );
+        }
+      } catch (error) {
+        console.error('Error handling WebSocket message:', error);
+      }
+    };
+    
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     memoryStorageService.initializeIfEmpty();
     
     const unsubscribe = useConnectivityStore.subscribe((state) => {
@@ -65,62 +129,81 @@ export default function Home() {
     fetchArticles();
   }, []);
 
-  // Effect for handling online/offline transitions
   useEffect(() => {
-    // When coming back online, try to sync changes and refresh data
     if (!isOffline) {
       syncAndRefresh();
     } else {
-      // When going offline, make sure we have local data
       ensureLocalData();
     }
   }, [isOffline]);
 
   const ensureLocalData = () => {
-    // Initialize memory storage with sample data if needed
     memoryStorageService.initializeIfEmpty();
     
-    // If we have no articles loaded but have memory data, load it
     if (articles.length === 0) {
       const memoryArticles = memoryStorageService.getArticles();
       if (memoryArticles.length > 0) {
-        setArticles(memoryArticles);
+        setArticles(removeDuplicateArticles(memoryArticles));
         setError(null);
       }
     }
+  };
+
+  const removeDuplicateArticles = (articlesList: Article[]): Article[] => {
+    const unique = new Map<string, Article>();
+    
+    [...articlesList].reverse().forEach(article => {
+      const key = `${article.title.toLowerCase()}-${article.authors.toLowerCase()}`;
+      if (!unique.has(key)) {
+        unique.set(key, article);
+      } else {
+        console.log(`Found duplicate article: "${article.title}" by ${article.authors}`);
+      }
+    });
+    
+    const result = Array.from(unique.values());
+    if (articlesList.length !== result.length) {
+      console.log(`Removed ${articlesList.length - result.length} duplicate articles`);
+    }
+    
+    return result;
   };
 
   const syncAndRefresh = async () => {
     try {
       setIsLoading(true);
       
-      // Always clear any existing state first
       setArticles([]);
       
-      // 1. Check if we have any pending operations first
       const pendingOps = memoryStorageService.getPendingOperations();
       const hasPendingOps = pendingOps.length > 0;
       
       if (hasPendingOps) {
-        // If we have pending operations, sync them first
         console.log(`Syncing ${pendingOps.length} pending operations`);
-        await api.articles.syncPendingOperations();
+        try {
+          await api.articles.syncPendingOperations();
+          console.log("Synced pending operations successfully");
+        } catch (syncError) {
+          console.error("Error syncing pending operations:", syncError);
+        }
       }
       
-      // Always fetch fresh data from server after potentially syncing
       try {
         const serverArticles = await api.articles.getAll();
         console.log(`Retrieved ${serverArticles.length} articles from server`);
-        setArticles(serverArticles);
+        
+        const uniqueArticles = removeDuplicateArticles(serverArticles);
+        
+        setArticles(uniqueArticles);
         setCurrentPage(1);
         setError(null);
       } catch (error) {
         console.error('Failed to fetch articles from server:', error);
         
-        // If we can't get server data, use memory as fallback
         const memoryArticles = memoryStorageService.getArticles();
         if (memoryArticles.length > 0) {
-          setArticles(memoryArticles);
+          const uniqueArticles = removeDuplicateArticles(memoryArticles);
+          setArticles(uniqueArticles);
           setCurrentPage(1);
         } else {
           setError('Failed to load articles. No offline data available.');
@@ -129,10 +212,9 @@ export default function Home() {
     } catch (error) {
       console.error("Failed to sync or refresh data:", error);
       
-      // If sync failed but we have memory data, show it
       const memoryArticles = memoryStorageService.getArticles();
       if (memoryArticles.length > 0) {
-        setArticles(memoryArticles);
+        setArticles(removeDuplicateArticles(memoryArticles));
       } else {
         setError('Failed to sync or load articles.');
       }
@@ -160,7 +242,6 @@ export default function Home() {
       console.error('Failed to sort articles:', err);
       setError('Failed to sort articles. Please try again later.');
       
-      // Try memory storage as fallback
       if (shouldUseLocalStorage()) {
         try {
           const localData = memoryStorageService.getSortedArticles(sortField, sortOrder);
@@ -186,18 +267,18 @@ export default function Home() {
         data = await api.articles.getAll();
       }
       
-      setArticles(data);
+      const uniqueArticles = removeDuplicateArticles(data);
+      
+      setArticles(uniqueArticles);
       setCurrentPage(1);
       setError(null);
       
-      // Update memory storage with the latest data
-      if (data.length > 0) {
-        memoryStorageService.saveArticles(data);
+      if (uniqueArticles.length > 0) {
+        memoryStorageService.saveArticles(uniqueArticles);
       }
     } catch (err) {
       console.error('Failed to fetch articles:', err);
       
-      // If we're offline, try to load from memory storage as fallback
       if (shouldUseLocalStorage()) {
         try {
           let localData: Article[];
@@ -208,12 +289,12 @@ export default function Home() {
           }
           
           if (localData.length > 0) {
-            setArticles(localData);
+            const uniqueLocalData = removeDuplicateArticles(localData);
+            setArticles(uniqueLocalData);
             setCurrentPage(1);
             setError(null);
             setIsOffline(true);
           } else {
-            // If no memory data available, show a more helpful error message
             setError('No articles available offline. Please reconnect to network or server.');
           }
         } catch (localErr) {
@@ -245,7 +326,6 @@ export default function Home() {
         setIsLoading(false);
       }
     } else {
-      // If search query is empty, fetch all articles
       fetchArticles();
     }
   };
@@ -334,13 +414,26 @@ export default function Home() {
         <div className="flex items-center gap-4">
           <h1 className="text-3xl font-bold text-gray-900">Article Library</h1>
           <button
-            onClick={() => router.push('/add')}
-            className="bg-[#E5EFFF] text-gray-800 px-8 py-4 rounded-lg text-lg font-bold shadow-lg hover:bg-blue-100 transition-colors transform hover:scale-105 border-2 border-blue-200"
+            onClick={() => isAuthenticated ? router.push('/add') : setIsLoginModalOpen(true)}
+            className={`bg-[#E5EFFF] text-gray-800 px-8 py-4 rounded-lg text-lg font-bold shadow-lg transition-colors transform hover:scale-105 border-2 ${
+              isAuthenticated ? 'hover:bg-blue-100 border-blue-200' : 'opacity-60 cursor-not-allowed border-gray-200'
+            }`}
+            title={isAuthenticated ? undefined : 'Please login to add articles'}
           >
             Add article
           </button>
         </div>
         <div className="flex gap-4">
+          {isAuthenticated ? (
+            <UserMenu />
+          ) : (
+            <button
+              onClick={() => setIsLoginModalOpen(true)}
+              className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors"
+            >
+              Login
+            </button>
+          )}
           <button
             onClick={() => router.push('/all-articles')}
             className="bg-[#E5EFFF] text-gray-800 px-4 py-2 rounded hover:bg-blue-100 transition-colors"
@@ -449,7 +542,6 @@ export default function Home() {
                     value={sortField}
                     onChange={(e) => {
                       setSortField(e.target.value as SortField);
-                      // Clear search and year filters when sorting changes
                       if (searchQuery) setSearchQuery("");
                       if (yearFilter) setYearFilter("");
                     }}
@@ -501,7 +593,6 @@ export default function Home() {
                   key={`${article.title}-${index}`}
                   className="hover:bg-gray-50 cursor-pointer"
                   onClick={() => {
-                    // For temporary offline IDs, use the ID, otherwise use the index
                     const articleId = article.id?.startsWith('temp-') 
                       ? article.id 
                       : article.index.toString();
@@ -521,7 +612,7 @@ export default function Home() {
                         article.year,
                         yearStats.min,
                         yearStats.max,
-                        true // Inverse for years (newer = greener)
+                        true
                       ).bg,
                       color: getGradientColor(
                         article.year,
@@ -540,7 +631,7 @@ export default function Home() {
                         article.citations,
                         citationStats.min,
                         citationStats.max,
-                        false // Not inverse for citations (more = greener)
+                        false
                       ).bg,
                       color: getGradientColor(
                         article.citations,
@@ -565,7 +656,7 @@ export default function Home() {
             </table>
           </div>
 
-          {/* Pagination - fixed version */}
+          {/* Pagination */}
           <div className="mt-4 flex justify-between items-center">
             <div className="text-sm text-gray-900">
               Showing {articles.length > 0 ? startIndex + 1 : 0} to {Math.min(startIndex + itemsPerPage, articles.length)} of {articles.length} results
@@ -590,6 +681,10 @@ export default function Home() {
           </div>
         </div>
       </div>
+      <LoginModal 
+        isOpen={isLoginModalOpen} 
+        onClose={() => setIsLoginModalOpen(false)} 
+      />
     </div>
   );
 }

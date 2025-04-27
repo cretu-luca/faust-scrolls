@@ -9,7 +9,6 @@ import { Article } from '../../types/article';
 type Params = { id: string };
 
 export default function Details({ params }: { params: Params | Promise<Params> }) {
-  // Use React.use() to unwrap the params promise if needed
   const resolvedParams = params instanceof Promise ? React.use(params) : params;
   const router = useRouter();
   const [article, setArticle] = useState<Article | null>(null);
@@ -24,15 +23,11 @@ export default function Details({ params }: { params: Params | Promise<Params> }
         setIsLoading(true);
         const articleId = resolvedParams.id;
         
-        // Check if we're in offline mode
         const offline = shouldUseLocalStorage();
         setIsOfflineMode(offline);
         
-        // Check if the ID is a temporary ID (starts with "temp-")
         if (articleId.startsWith('temp-')) {
-          // This is an offline-added article with a temporary ID
           if (offline) {
-            // Try to get it from memory storage by ID
             const memoryArticles = memoryStorageService.getArticles();
             const foundArticle = memoryArticles.find(a => a.id === articleId);
             
@@ -50,7 +45,6 @@ export default function Details({ params }: { params: Params | Promise<Params> }
           }
         }
         
-        // Try to parse as numeric index
         const index = parseInt(articleId);
         
         if (isNaN(index) || index < 0) {
@@ -58,7 +52,6 @@ export default function Details({ params }: { params: Params | Promise<Params> }
           return;
         }
         
-        // Try API first, fall back to memory storage if offline
         try {
           console.log("Fetching article with index:", index);
           const apiArticle = await api.articles.getByIndex(index);
@@ -66,7 +59,6 @@ export default function Details({ params }: { params: Params | Promise<Params> }
           setArticle(apiArticle);
           setError(null);
         } catch (err) {
-          // If we're offline or the API failed, try memory storage
           if (offline) {
             const memoryArticle = memoryStorageService.getArticleByIndex(index);
             if (memoryArticle) {
@@ -80,7 +72,6 @@ export default function Details({ params }: { params: Params | Promise<Params> }
               }
             }
           } else {
-            // Not offline, so just show the error
             if ((err as any).status === 404) {
               setError('Article not found');
             } else {
@@ -98,7 +89,6 @@ export default function Details({ params }: { params: Params | Promise<Params> }
 
   const handleEdit = () => {
     if (article) {
-      // Use ID for temporary articles, index for regular ones
       const editId = article.id?.startsWith('temp-') ? article.id : article.index.toString();
       router.push(`/edit/${editId}`);
     }
@@ -113,7 +103,6 @@ export default function Details({ params }: { params: Params | Promise<Params> }
     try {
       setIsDeleting(true);
       
-      // Use ID for temporary articles, index for regular ones
       const deleteId = article.id?.startsWith('temp-') ? article.id : article.index.toString();
       
       await api.articles.delete(deleteId);

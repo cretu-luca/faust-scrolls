@@ -10,15 +10,12 @@ interface DomainHypergraphProps {
   entries: ArxivEntry[];
 }
 
-// Helper function to resolve article coordinates
 const resolveArticleCoordinates = (articles: ArxivEntry[], referenceArticles: ArxivEntry[]): ArxivEntry[] => {
   return articles.map(article => {
-    // If the article already has coordinates, use them
     if (article.coordinates && !isNaN(article.coordinates.x) && !isNaN(article.coordinates.y)) {
       return article;
     }
     
-    // Try to find a match in the reference articles by title or other fields
     const match = referenceArticles.find(ref => 
       ref.title.toLowerCase() === article.title.toLowerCase() ||
       (ref.authors === article.authors && ref.journal === article.journal)
@@ -31,7 +28,6 @@ const resolveArticleCoordinates = (articles: ArxivEntry[], referenceArticles: Ar
       };
     }
     
-    // If no match, assign random coordinates
     return {
       ...article,
       coordinates: {
@@ -162,7 +158,7 @@ export default function DomainHypergraph({ entries: inputEntries }: DomainHyperg
   }, [yearFilter, entries]);
 
   const handleCanvasMouseMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!canvasRef.current || selectedArticle) return; // Don't update hover state if an article is selected
+    if (!canvasRef.current || selectedArticle) return;
 
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
@@ -172,7 +168,7 @@ export default function DomainHypergraph({ entries: inputEntries }: DomainHyperg
   };
 
   const handleCanvasMouseLeave = () => {
-    if (selectedArticle) return; // Don't clear state if an article is selected
+    if (selectedArticle) return;
     setMousePosition(null);
     setHoveredArticle(null);
     setPopupPosition(null);

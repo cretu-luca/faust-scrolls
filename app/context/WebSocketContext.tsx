@@ -34,14 +34,11 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
   const [lastMessage, setLastMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    // Only run on client side
     if (typeof window === 'undefined') return;
 
-    // Initialize WebSocket
     const ws = new WebSocket('ws://localhost:8000/ws');
     setWebSocket(ws);
 
-    // Set up event listeners
     ws.onopen = () => {
       console.log('Connected to WebSocket server');
       setIsConnected(true);
@@ -68,13 +65,11 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
             setIsGenerating(true);
           }
         }
-        // We don't process 'new_article' messages here - they are handled in the component
       } catch (error) {
         console.error('Error parsing WebSocket message in context:', error);
       }
     };
 
-    // Clean up on unmount
     return () => {
       ws.close();
     };

@@ -14,20 +14,15 @@ const OfflineStatus = () => {
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
-    // Initialize connectivity listeners
     const cleanup = initConnectivityListeners();
     
-    // Set initial state after mounting to avoid hydration mismatch
     setMountedState({
       isOnline: useConnectivityStore.getState().isOnline,
       isServerAvailable: useConnectivityStore.getState().isServerAvailable
     });
 
-    // Ensure we have memory data for offline use
-    memoryStorageService.initializeIfEmpty();
     checkLocalData();
     
-    // Slight delay to allow for animation to be visible
     setTimeout(() => {
       setIsVisible(true);
     }, 100);
@@ -37,9 +32,7 @@ const OfflineStatus = () => {
     };
   }, []);
 
-  // Watch for changes in connectivity to trigger sync
   useEffect(() => {
-    // Skip if not mounted yet
     if (!mountedState) return;
     
     const prevState = mountedState;
@@ -48,8 +41,6 @@ const OfflineStatus = () => {
       isServerAvailable: useConnectivityStore.getState().isServerAvailable
     });
     
-    // If we were offline or server was down before, but now we're back online,
-    // try to sync pending operations
     const wasOffline = !prevState.isOnline || !prevState.isServerAvailable;
     const isNowOnline = useConnectivityStore.getState().isOnline && 
                         useConnectivityStore.getState().isServerAvailable;
@@ -58,36 +49,29 @@ const OfflineStatus = () => {
       syncPendingOperations();
     }
 
-    // If we just went offline, check if we have local data
     if (!wasOffline && !isNowOnline) {
       checkLocalData();
-      // Auto-expand the notification when we go offline
       setExpanded(true);
-      // Make sure it's visible
       setIsVisible(true);
     }
   }, [isOnline, isServerAvailable]);
 
-  // Function to check if we have any data in memory storage
   const checkLocalData = () => {
     const articles = memoryStorageService.getArticles();
     setHasLocalData(articles.length > 0);
 
-    // If we're offline and have no data, initialize with samples
     if (shouldUseLocalStorage() && articles.length === 0) {
       memoryStorageService.initializeIfEmpty();
       setHasLocalData(memoryStorageService.getArticles().length > 0);
     }
   };
 
-  // Function to sync pending operations with the server
   const syncPendingOperations = async () => {
     try {
       setSyncing(true);
       await api.articles.syncPendingOperations();
       setSyncing(false);
       
-      // Refresh the local data status after sync
       checkLocalData();
     } catch (error) {
       console.error('Failed to sync pending operations:', error);
@@ -95,7 +79,6 @@ const OfflineStatus = () => {
     }
   };
 
-  // Don't render anything during SSR to avoid hydration issues
   if (mountedState === null) {
     return null;
   }
@@ -104,12 +87,10 @@ const OfflineStatus = () => {
   const isServerDown = !mountedState.isServerAvailable;
   const isOfflineMode = isOffline || isServerDown;
   
-  // If everything is working and not syncing, don't show the banner
   if (!isOfflineMode && !syncing) {
     return null;
   }
 
-  // Determine which notification to show
   const getNotificationContent = () => {
     if (syncing) {
       return {
@@ -156,7 +137,6 @@ const OfflineStatus = () => {
   const { icon, message } = getNotificationContent();
   const bgColor = syncing ? 'bg-blue-200' : !hasLocalData ? 'bg-orange-200' : 'bg-red-200';
   
-  // Animation classes - toned down but still attention-getting
   const animationClasses = isVisible ? 'slide-in-down attention-flash' : 'opacity-0';
 
   return (

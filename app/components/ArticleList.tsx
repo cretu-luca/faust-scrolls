@@ -1,6 +1,5 @@
 'use client';
 
-// this is new
 import { useState, useEffect, useMemo } from 'react';
 import { api } from '../services/api';
 import { Article } from '../types/article';
@@ -11,7 +10,6 @@ export default function ArticleList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Calculate min/max values for year and citations
   const { minYear, maxYear, minCitations, maxCitations } = useMemo(() => {
     if (!articles.length) {
       return { minYear: 0, maxYear: 0, minCitations: 0, maxCitations: 0 };

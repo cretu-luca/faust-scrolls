@@ -1,6 +1,5 @@
 import { Article } from '../types/article';
 
-// Type definitions for pending operations
 type OperationType = 'ADD' | 'UPDATE' | 'DELETE';
 
 interface PendingOperation {
@@ -10,7 +9,6 @@ interface PendingOperation {
   timestamp: number;
 }
 
-// Sample data for offline mode
 const SAMPLE_ARTICLES: Article[] = [
   {
     authors: "John Smith, Jane Doe",
@@ -47,18 +45,15 @@ const SAMPLE_ARTICLES: Article[] = [
   }
 ];
 
-// In-memory storage
 let articleStore: Article[] = [];
 let pendingOperations: PendingOperation[] = [];
 let isInitialized = false;
 
 export const memoryStorageService = {
-  // Check if storage has been initialized
   isInitialized(): boolean {
     return isInitialized;
   },
   
-  // Initialize storage with sample data if empty
   initializeIfEmpty(): void {
     if (!isInitialized) {
       if (articleStore.length === 0) {
@@ -68,25 +63,33 @@ export const memoryStorageService = {
     }
   },
 
-  // Get all articles from memory
   getArticles(): Article[] {
     return [...articleStore];
   },
 
-  // Save articles to memory
   saveArticles(articles: Article[]): void {
-    articleStore = [...articles];
+    articleStore = this.removeDuplicateArticles(articles);
   },
 
-  // Add a single article
+  removeDuplicateArticles(articlesList: Article[]): Article[] {
+    const unique = new Map<string, Article>();
+    
+    [...articlesList].reverse().forEach(article => {
+      const key = `${article.title.toLowerCase()}-${article.authors.toLowerCase()}`;
+      if (!unique.has(key)) {
+        unique.set(key, article);
+      }
+    });
+    
+    return Array.from(unique.values());
+  },
+
   addArticle(article: Article): void {
     try {
-      // Generate a temporary ID if not present
       if (!article.id) {
         article.id = `temp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
       }
       
-      // Generate a temporary index if not present
       if (article.index === undefined) {
         const maxIndex = articleStore.length > 0 
           ? articleStore.reduce((max, current) => 
@@ -95,14 +98,24 @@ export const memoryStorageService = {
         article.index = maxIndex + 1;
       }
       
-      articleStore.push({ ...article });
-      this.addPendingOperation('ADD', article);
+      const key = `${article.title.toLowerCase()}-${article.authors.toLowerCase()}`;
+      const existingIndex = articleStore.findIndex(a => 
+        `${a.title.toLowerCase()}-${a.authors.toLowerCase()}` === key
+      );
+      
+      if (existingIndex >= 0) {
+        console.log(`Found existing article with the same title and author: "${article.title}"`);
+        articleStore[existingIndex] = { ...article };
+        this.addPendingOperation('UPDATE', article);
+      } else {
+        articleStore.push({ ...article });
+        this.addPendingOperation('ADD', article);
+      }
     } catch (error) {
       console.error('Error adding article to memory storage:', error);
     }
   },
 
-  // Update an article
   updateArticle(id: string, articleData: Partial<Article>): void {
     try {
       const index = articleStore.findIndex(a => a.id === id);
@@ -116,7 +129,6 @@ export const memoryStorageService = {
     }
   },
 
-  // Delete an article
   deleteArticle(id: string): void {
     try {
       const originalLength = articleStore.length;
@@ -130,7 +142,6 @@ export const memoryStorageService = {
     }
   },
 
-  // Search articles
   searchArticles(query: string): Article[] {
     try {
       if (articleStore.length === 0) return [];
@@ -149,7 +160,6 @@ export const memoryStorageService = {
     }
   },
 
-  // Get articles by year
   getArticlesByYear(year: number): Article[] {
     try {
       return articleStore.filter(article => article.year === year);
@@ -159,7 +169,6 @@ export const memoryStorageService = {
     }
   },
 
-  // Get article by index
   getArticleByIndex(index: number): Article | undefined {
     try {
       return articleStore.find(article => article.index === index);
@@ -169,7 +178,6 @@ export const memoryStorageService = {
     }
   },
 
-  // Get sorted articles
   getSortedArticles(sortBy: string, order: string): Article[] {
     try {
       if (articleStore.length === 0) return [];
@@ -193,14 +201,12 @@ export const memoryStorageService = {
     }
   },
 
-  // Pending operations management
   getPendingOperations(): PendingOperation[] {
     return [...pendingOperations];
   },
 
   addPendingOperation(type: OperationType, article?: Article, id?: string): void {
     try {
-      // Prepare article data without coordinates and embedding
       let articleData;
       if (article) {
         const { coordinates, embedding, ...rest } = article;
@@ -220,5 +226,18 @@ export const memoryStorageService = {
 
   clearPendingOperations(): void {
     pendingOperations = [];
+  },
+  
+  removeArticlesByIds(ids: string[]): void {
+    try {
+      if (ids.length === 0) return;
+      
+      const originalLength = articleStore.length;
+      articleStore = articleStore.filter(article => !ids.includes(article.id as string));
+      
+      console.log(`Removed ${originalLength - articleStore.length} articles by IDs`);
+    } catch (error) {
+      console.error('Error removing articles by IDs from memory storage:', error);
+    }
   }
 }; 

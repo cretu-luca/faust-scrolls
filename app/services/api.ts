@@ -6,7 +6,6 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export class APIError extends Error {
   constructor(public status: number, message: string) {
-    // Try to parse the message if it's JSON
     let errorMessage = message;
     try {
       const parsed = JSON.parse(message);
@@ -14,7 +13,6 @@ export class APIError extends Error {
         errorMessage = parsed.detail;
       }
     } catch (e) {
-      // If parsing fails, just use the original message
     }
     
     super(errorMessage);
@@ -22,9 +20,13 @@ export class APIError extends Error {
   }
 }
 
+const getAuthToken = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem('faustToken');
+};
+
 export const api = {
   async fetch<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    // Check if we should use memory storage due to connectivity issues
     if (shouldUseLocalStorage()) {
       throw new APIError(0, 'Network or server unavailable');
     }
@@ -32,13 +34,19 @@ export const api = {
     const url = `${API_BASE_URL}${endpoint}`;
     console.log(`Fetching from: ${url}`, options);
     
+    const token = getAuthToken();
+    
+    const requestHeaders = new Headers(options.headers);
+    requestHeaders.set('Content-Type', 'application/json');
+    
+    if (token) {
+      requestHeaders.set('Authorization', `Bearer ${token}`);
+    }
+    
     try {
       const response = await fetch(url, {
         ...options,
-        headers: {
-          'Content-Type': 'application/json',
-          ...options.headers,
-        },
+        headers: requestHeaders,
       });
 
       if (!response.ok) {
@@ -63,7 +71,6 @@ export const api = {
     } catch (error) {
       console.error('API Fetch Error:', error);
       
-      // Mark server as unavailable on connection errors
       if (error instanceof Error && 
          (error.message.includes('Failed to fetch') || 
           error.message.includes('Network request failed'))) {
@@ -142,11 +149,10 @@ export const api = {
       } catch (error) {
         if (shouldUseLocalStorage()) {
           console.log('Using memory storage to add article');
-          // Create a new article with required fields
           const newArticle: Article = {
             ...article,
-            coordinates: { x: Math.random(), y: Math.random() }, // Temporary coordinates
-            index: -1 // Will be updated by memoryStorageService
+            coordinates: { x: Math.random(), y: Math.random() },
+            index: -1
           };
           memoryStorageService.addArticle(newArticle);
           return newArticle;
@@ -172,7 +178,6 @@ export const api = {
       } catch (error) {
         if (shouldUseLocalStorage()) {
           console.log('Using memory storage to update article');
-          // Get the existing article to preserve other fields
           const articles = memoryStorageService.getArticles();
           const existingArticle = articles.find(a => a.id === articleId);
           
@@ -216,34 +221,27 @@ export const api = {
       }
     },
 
-    // Sync pending operations when back online
     async syncPendingOperations(): Promise<void> {
-      // Skip if we should still use memory storage
       if (shouldUseLocalStorage()) {
         return;
       }
       
       const pendingOperations = memoryStorageService.getPendingOperations();
       
-      // Get current memory articles
       const memoryArticles = memoryStorageService.getArticles();
       
-      // First fetch all server articles to make sure we have everything 
-      // that might have been added while offline
       let serverArticles: Article[] = [];
       try {
         serverArticles = await api.fetch<Article[]>('/all_articles');
         console.log(`Fetched ${serverArticles.length} articles from server before sync`);
       } catch (error) {
         console.error('Failed to fetch server articles before sync:', error);
-        return; // Can't proceed if we can't get the server state
+        return;
       }
       
-      // We'll use these objects to track which articles to keep
       const tempArticles: Article[] = [];
       const nonTempArticles: Article[] = [];
       
-      // Separate temp and non-temp articles
       memoryArticles.forEach(article => {
         if (article.id && article.id.startsWith('temp-')) {
           tempArticles.push(article);
@@ -255,7 +253,6 @@ export const api = {
       console.log(`Found ${tempArticles.length} temporary articles and ${nonTempArticles.length} regular articles in memory`);
       
       if (pendingOperations.length === 0) {
-        // If no pending operations, just save the server articles (clear memory storage)
         memoryStorageService.saveArticles(serverArticles);
         console.log('No pending operations, replaced memory with server articles');
         return;
@@ -263,35 +260,47 @@ export const api = {
       
       console.log(`Syncing ${pendingOperations.length} pending operations`);
       
-      // Track temporary IDs and titles of articles being added from offline
       const tempArticleIds = new Set<string>();
-      const tempArticleTitles = new Map<string, string>(); // title -> id mapping
+      const tempArticleTitles = new Map<string, string>();
       
-      // Collect all temp article information
       tempArticles.forEach(article => {
         if (article.id && article.title) {
           tempArticleIds.add(article.id);
           tempArticleTitles.set(article.title.toLowerCase(), article.id);
         }
       });
+
+      const duplicateArticles: string[] = [];
+      tempArticles.forEach(tempArticle => {
+        const exists = serverArticles.some(serverArticle => 
+          serverArticle.title.toLowerCase() === tempArticle.title.toLowerCase() &&
+          serverArticle.authors.toLowerCase() === tempArticle.authors.toLowerCase()
+        );
+        
+        if (exists && tempArticle.id) {
+          console.log(`Found duplicate article "${tempArticle.title}" on server, will skip adding`);
+          duplicateArticles.push(tempArticle.id);
+        }
+      });
       
-      // Sort operations by timestamp to maintain order
       const sortedOperations = [...pendingOperations]
         .sort((a, b) => a.timestamp - b.timestamp);
       
-      // Execute operations in order
       for (const operation of sortedOperations) {
         try {
           switch (operation.type) {
             case 'ADD':
-              if (operation.article) {
-                // The server will generate new IDs and indexes
+              if (operation.article && operation.id) {
+                if (duplicateArticles.includes(operation.id)) {
+                  console.log(`Skipping duplicate article operation for ID: ${operation.id}`);
+                  continue;
+                }
+                
                 await api.articles.add(operation.article);
               }
               break;
             case 'UPDATE':
               if (operation.id && operation.article) {
-                // Skip updates to temp IDs since we're adding them fresh to the server
                 if (!operation.id.startsWith('temp-')) {
                   await api.articles.update(operation.id, operation.article);
                 }
@@ -299,7 +308,6 @@ export const api = {
               break;
             case 'DELETE':
               if (operation.id) {
-                // Only delete non-temp IDs from server
                 if (!operation.id.startsWith('temp-')) {
                   await api.articles.delete(operation.id);
                 }
@@ -308,22 +316,17 @@ export const api = {
           }
         } catch (error) {
           console.error(`Failed to sync operation:`, operation, error);
-          // Continue with other operations
         }
       }
       
-      // Clear pending operations
       memoryStorageService.clearPendingOperations();
       
-      // Refresh server articles after operations
       try {
         const refreshedServerArticles = await api.fetch<Article[]>('/all_articles');
         console.log(`Fetched ${refreshedServerArticles.length} articles from server after sync`);
         
-        // Completely replace memory storage with server data - this is the key to avoiding duplicates
         memoryStorageService.saveArticles(refreshedServerArticles);
         
-        // Now all articles are synced, and memory only contains server articles
         console.log('Memory storage now contains only server articles');
       } catch (error) {
         console.error('Failed to fetch server articles after sync:', error);

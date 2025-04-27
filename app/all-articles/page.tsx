@@ -5,6 +5,9 @@ import { api } from '../services/api';
 import { Article } from '../types/article';
 import { memoryStorageService } from '../services/memoryStorageService';
 import { shouldUseLocalStorage } from '../services/connectivityService';
+import LoginModal from '../components/LoginModal';
+import UserMenu from '../components/UserMenu';
+import { useAuth } from '../context/AuthContext';
 
 export default function AllArticles() {
   const router = useRouter();
@@ -13,30 +16,125 @@ export default function AllArticles() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isOffline, setIsOffline] = useState(false);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const { isAuthenticated } = useAuth();
   
-  // For infinite scrolling
+  const wsRef = useRef<WebSocket | null>(null);
+  const [wsConnected, setWsConnected] = useState(false);
+  
   const [hasMore, setHasMore] = useState(true);
   const [page, setPage] = useState(1);
   const loaderRef = useRef<HTMLDivElement>(null);
   const articleContainerRef = useRef<HTMLDivElement>(null);
   
-  // Toggle for sliding window vs. all articles
   const [useSlidingWindow, setUseSlidingWindow] = useState(true);
   
-  // Configuration
-  const BATCH_SIZE = 30;  // Increased from 15 to 30 articles per batch
-  const WINDOW_SIZE = 100; // Increased from 50 to 100 articles to keep in the DOM
+  const BATCH_SIZE = 30;
+  const WINDOW_SIZE = 100;
+  
+  const removeDuplicateArticles = (articlesList: Article[]): Article[] => {
+    const unique = new Map<string, Article>();
+    
+    [...articlesList].reverse().forEach(article => {
+      const key = `${article.title.toLowerCase()}-${article.authors.toLowerCase()}`;
+      if (!unique.has(key)) {
+        unique.set(key, article);
+      } else {
+        console.log(`Found duplicate article: "${article.title}" by ${article.authors}`);
+      }
+    });
+    
+    const result = Array.from(unique.values());
+    if (articlesList.length !== result.length) {
+      console.log(`Removed ${articlesList.length - result.length} duplicate articles`);
+    }
+    
+    return result;
+  };
+  
+  useEffect(() => {
+    if (typeof window === 'undefined' || isOffline) return;
+    
+    console.log('Initializing WebSocket connection in AllArticles component');
+   
+    const ws = new WebSocket('ws://localhost:8000/ws');
+    wsRef.current = ws;
+    
+    ws.onopen = () => {
+      console.log('WebSocket connected in AllArticles component');
+      setWsConnected(true);
+    };
+    
+    ws.onclose = () => {
+      console.log('WebSocket disconnected in AllArticles component');
+      setWsConnected(false);
+    };
+    
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        console.log('Received WebSocket message in AllArticles:', message);
+        
+        if (message.type === 'new_article') {
+          console.log('New article received in AllArticles:', message.data);
+          
+          setArticles(prevArticles => {
+            const exists = prevArticles.some(article => 
+              article.id === message.data.id || 
+              article.index === message.data.index ||
+              (article.title.toLowerCase() === message.data.title.toLowerCase() && 
+               article.authors.toLowerCase() === message.data.authors.toLowerCase())
+            );
+            
+            if (exists) {
+              console.log('Article already exists, not adding duplicate');
+              return prevArticles;
+            }
+            
+            const newArticles = [...prevArticles, message.data];
+            
+            if (!useSlidingWindow || displayedArticles.length < WINDOW_SIZE) {
+              setDisplayedArticles(prev => [...prev, message.data]);
+            }
+            
+            return newArticles;
+          });
+        } 
+        else if (message.type === 'article_updated') {
+          console.log('Article updated in AllArticles:', message.data);
+          
+          setArticles(prevArticles => 
+            prevArticles.map(article => 
+              article.index === message.data.index ? message.data : article
+            )
+          );
+          
+          setDisplayedArticles(prevDisplayed => 
+            prevDisplayed.map(article => 
+              article.index === message.data.index ? message.data : article
+            )
+          );
+        }
+      } catch (error) {
+        console.error('Error handling WebSocket message in AllArticles:', error);
+      }
+    };
+    
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+    };
+  }, [displayedArticles.length, useSlidingWindow, isOffline]);
   
   useEffect(() => {
     fetchInitialArticles();
   }, []);
   
-  // Initial fetch of all articles
   const fetchInitialArticles = async () => {
     try {
       setIsLoading(true);
       
-      // Check if we're offline
       const offline = shouldUseLocalStorage();
       setIsOffline(offline);
       
@@ -49,26 +147,31 @@ export default function AllArticles() {
       }
       
       console.log(`Total articles fetched: ${data.length}`);
-      setArticles(data);
       
-      // Load initial batch
-      const initialBatch = data.slice(0, BATCH_SIZE);
+      const uniqueData = removeDuplicateArticles(data);
+      if (data.length !== uniqueData.length) {
+        console.log(`Removed ${data.length - uniqueData.length} duplicates, now have ${uniqueData.length} articles`);
+      }
+      
+      setArticles(uniqueData);
+      
+      const initialBatch = uniqueData.slice(0, BATCH_SIZE);
       setDisplayedArticles(initialBatch);
-      setHasMore(data.length > BATCH_SIZE);
+      setHasMore(uniqueData.length > BATCH_SIZE);
       setError(null);
       
     } catch (err) {
       console.error('Failed to fetch articles:', err);
       setError('Failed to load articles. Please try again later.');
       
-      // Try memory storage as fallback
       try {
         const memoryData = memoryStorageService.getArticles();
         if (memoryData.length > 0) {
-          setArticles(memoryData);
-          const initialBatch = memoryData.slice(0, BATCH_SIZE);
+          const uniqueMemoryData = removeDuplicateArticles(memoryData);
+          setArticles(uniqueMemoryData);
+          const initialBatch = uniqueMemoryData.slice(0, BATCH_SIZE);
           setDisplayedArticles(initialBatch);
-          setHasMore(memoryData.length > BATCH_SIZE);
+          setHasMore(uniqueMemoryData.length > BATCH_SIZE);
           setError(null);
         }
       } catch (localErr) {
@@ -80,7 +183,6 @@ export default function AllArticles() {
     }
   };
   
-  // Load more articles when scrolling
   const loadMoreArticles = useCallback(() => {
     if (isLoading || !hasMore) return;
     
@@ -102,22 +204,17 @@ export default function AllArticles() {
     setDisplayedArticles(prevArticles => {
       let updatedArticles = [...prevArticles, ...newArticles];
       
-      // Apply sliding window if we've exceeded the window size
       if (useSlidingWindow && updatedArticles.length > WINDOW_SIZE) {
-        // Calculate how many items to remove from the top
         const removedCount = updatedArticles.length - WINDOW_SIZE;
         console.log(`Sliding window threshold reached: total ${updatedArticles.length}, window size ${WINDOW_SIZE}`);
         console.log(`Will remove ${removedCount} articles from the top of the view`);
         
-        // Remove articles from the top that are out of view
         updatedArticles = updatedArticles.slice(removedCount);
         
-        // Update the page number to reflect our actual position in the full dataset
         const effectiveStartIndex = startIndex - (removedCount * BATCH_SIZE);
         const effectivePage = Math.floor(effectiveStartIndex / BATCH_SIZE) + 1;
         console.log(`Adjusted page number from ${nextPage} to ${effectivePage} after sliding window`);
         
-        // This will be executed in next render
         setTimeout(() => setPage(effectivePage), 0);
         
         console.log(`Sliding window applied, removed ${removedCount} articles from top, new length: ${updatedArticles.length}`);
@@ -131,7 +228,6 @@ export default function AllArticles() {
     console.log(`Updated hasMore: ${endIndex < articles.length}, endIndex: ${endIndex}, total: ${articles.length}`);
   }, [articles, isLoading, hasMore, page, useSlidingWindow]);
   
-  // Intersection Observer for infinite scrolling
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
@@ -153,14 +249,11 @@ export default function AllArticles() {
     };
   }, [loaderRef, hasMore, loadMoreArticles]);
   
-  // Toggle between sliding window and showing all articles
   const toggleSlidingWindow = () => {
     if (useSlidingWindow) {
-      // Switch to showing all articles
       setDisplayedArticles(articles);
       setHasMore(false);
     } else {
-      // Switch back to sliding window
       const initialBatch = articles.slice(0, BATCH_SIZE);
       setDisplayedArticles(initialBatch);
       setPage(1);
@@ -194,6 +287,17 @@ export default function AllArticles() {
         <div className="mb-6 flex justify-between items-center">
           <h1 className="text-2xl font-bold text-gray-900">All Articles</h1>
           <div className="flex space-x-2">
+            {isAuthenticated ? (
+              <UserMenu />
+            ) : (
+              <button
+                onClick={() => setIsLoginModalOpen(true)}
+                className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors"
+              >
+                Login
+              </button>
+            )}
+            
             <button
               onClick={() => router.push('/')}
               className="bg-[#E5EFFF] text-gray-800 px-4 py-2 rounded hover:bg-blue-100 transition-colors"
@@ -273,6 +377,11 @@ export default function AllArticles() {
           </div>
         </div>
       </div>
+      
+      <LoginModal 
+        isOpen={isLoginModalOpen} 
+        onClose={() => setIsLoginModalOpen(false)} 
+      />
     </div>
   );
 } 

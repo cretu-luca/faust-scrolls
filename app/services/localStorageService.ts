@@ -4,7 +4,6 @@ const STORAGE_KEY = 'faust-scrolls-articles';
 const PENDING_OPERATIONS_KEY = 'faust-scrolls-pending-operations';
 const STORAGE_INITIALIZED_KEY = 'faust-scrolls-initialized';
 
-// Type definitions for pending operations
 type OperationType = 'ADD' | 'UPDATE' | 'DELETE';
 
 interface PendingOperation {
@@ -14,7 +13,6 @@ interface PendingOperation {
   timestamp: number;
 }
 
-// Sample data for offline mode
 const SAMPLE_ARTICLES: Article[] = [
   {
     authors: "John Smith, Jane Doe",
@@ -52,32 +50,26 @@ const SAMPLE_ARTICLES: Article[] = [
 ];
 
 export const localStorageService = {
-  // Check if storage has been initialized
   isInitialized(): boolean {
     if (typeof window === 'undefined') return false;
     
     return localStorage.getItem(STORAGE_INITIALIZED_KEY) === 'true';
   },
   
-  // Initialize storage with sample data if empty
   initializeIfEmpty(): void {
     if (typeof window === 'undefined') return;
     
-    // Only initialize if not already initialized
     if (!this.isInitialized()) {
       const articles = this.getArticles();
       
-      // If no articles in storage, add sample data
       if (articles.length === 0) {
         this.saveArticles(SAMPLE_ARTICLES);
       }
       
-      // Mark as initialized
       localStorage.setItem(STORAGE_INITIALIZED_KEY, 'true');
     }
   },
 
-  // Get all articles from local storage
   getArticles(): Article[] {
     if (typeof window === 'undefined') return [];
     
@@ -90,7 +82,6 @@ export const localStorageService = {
     }
   },
 
-  // Save articles to local storage
   saveArticles(articles: Article[]): void {
     if (typeof window === 'undefined') return;
     
@@ -101,17 +92,14 @@ export const localStorageService = {
     }
   },
 
-  // Add a single article
   addArticle(article: Article): void {
     try {
       const articles = this.getArticles();
       
-      // Generate a temporary ID if not present
       if (!article.id) {
         article.id = `temp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
       }
       
-      // Generate a temporary index if not present
       if (article.index === undefined) {
         const maxIndex = articles.length > 0 
           ? articles.reduce((max, current) => 
@@ -128,7 +116,6 @@ export const localStorageService = {
     }
   },
 
-  // Update an article
   updateArticle(id: string, articleData: Partial<Article>): void {
     try {
       const articles = this.getArticles();
@@ -144,7 +131,6 @@ export const localStorageService = {
     }
   },
 
-  // Delete an article
   deleteArticle(id: string): void {
     try {
       const articles = this.getArticles();
@@ -159,7 +145,6 @@ export const localStorageService = {
     }
   },
 
-  // Search articles
   searchArticles(query: string): Article[] {
     try {
       const articles = this.getArticles();
@@ -179,7 +164,6 @@ export const localStorageService = {
     }
   },
 
-  // Get articles by year
   getArticlesByYear(year: number): Article[] {
     try {
       const articles = this.getArticles();
@@ -190,7 +174,6 @@ export const localStorageService = {
     }
   },
 
-  // Get article by index
   getArticleByIndex(index: number): Article | undefined {
     try {
       const articles = this.getArticles();
@@ -201,7 +184,6 @@ export const localStorageService = {
     }
   },
 
-  // Get sorted articles
   getSortedArticles(sortBy: string, order: string): Article[] {
     try {
       const articles = this.getArticles();
@@ -226,7 +208,6 @@ export const localStorageService = {
     }
   },
 
-  // Pending operations management
   getPendingOperations(): PendingOperation[] {
     if (typeof window === 'undefined') return [];
     
@@ -245,7 +226,6 @@ export const localStorageService = {
     try {
       const operations = this.getPendingOperations();
       
-      // Prepare article data without coordinates and embedding
       let articleData;
       if (article) {
         const { coordinates, embedding, ...rest } = article;

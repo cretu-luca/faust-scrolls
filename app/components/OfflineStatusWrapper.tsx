@@ -3,7 +3,6 @@
 import dynamic from 'next/dynamic';
 import { Suspense } from 'react';
 
-// Dynamic import with no SSR to avoid hydration issues
 const OfflineStatus = dynamic(() => import('./OfflineStatus'), { 
   ssr: false,
   loading: () => null 

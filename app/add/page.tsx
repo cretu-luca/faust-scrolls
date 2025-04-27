@@ -7,6 +7,8 @@ import CitationsChart from '../components/CitationsChart';
 import DomainHypergraph from '../components/DomainHypergraph';
 import { Article } from '../types/article';
 import { WebSocketProvider, useWebSocket } from '../context/WebSocketContext';
+import { useAuth } from '../context/AuthContext';
+import LoginModal from '../components/LoginModal';
 
 interface ValidationErrors {
   citations?: string;
@@ -20,17 +22,19 @@ interface ArticleInput {
   citations: number;
   year: number;
   abstract: string;
+  user_id?: string;
 }
 
 function AddArticleContent() {
   const router = useRouter();
+  const { isAuthenticated, user } = useAuth();
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [existingArticles, setExistingArticles] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
-  // Use the WebSocket context
   const { webSocket, isConnected, isGenerating, startGeneration, stopGeneration, lastMessage } = useWebSocket();
 
   const [formData, setFormData] = useState<ArticleInput>({
@@ -39,23 +43,26 @@ function AddArticleContent() {
     citations: 0,
     year: new Date().getFullYear(),
     journal: '',
-    abstract: ''
+    abstract: '',
+    user_id: user?.id
   });
 
-  // Fetch all articles for the charts
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setIsLoginModalOpen(true);
+    }
+  }, [isAuthenticated]);
+
   useEffect(() => {
     const fetchArticles = async () => {
       try {
         setIsLoading(true);
         const data = await api.articles.getAll();
         
-        // Convert to the format expected by charts
         const formattedData = data.map(article => ({
           ...article,
           year: article.year.toString(),
-          // Convert embeddings if needed
           embeddings: article.embedding || [],
-          // Ensure coordinates exist
           coordinates: article.coordinates || { x: 0, y: 0 }
         }));
         
@@ -70,12 +77,9 @@ function AddArticleContent() {
     fetchArticles();
   }, []);
 
-  // Listen for new articles
   useEffect(() => {
     if (!webSocket) return;
-    
-    // Create a message handler function
-    const handleMessage = (event: MessageEvent) => {
+        const handleMessage = (event: MessageEvent) => {
       try {
         const message = JSON.parse(event.data);
         console.log("WebSocket message received:", message);
@@ -84,7 +88,6 @@ function AddArticleContent() {
           console.log("New article received:", message.data);
           const newArticle = message.data;
           
-          // Format the article for chart compatibility
           const formattedArticle = {
             ...newArticle,
             year: newArticle.year.toString(),
@@ -105,11 +108,9 @@ function AddArticleContent() {
       }
     };
     
-    // Add the event listener to the WebSocket
     webSocket.addEventListener('message', handleMessage);
     console.log("WebSocket message listener added");
     
-    // Clean up
     return () => {
       webSocket.removeEventListener('message', handleMessage);
       console.log("WebSocket message listener removed");
@@ -157,14 +158,22 @@ function AddArticleContent() {
     e.preventDefault();
     setSubmitError(null);
     
+    if (!isAuthenticated || !user) {
+      setSubmitError('Please login to add articles');
+      setIsLoginModalOpen(true);
+      return;
+    }
+    
     if (validateForm()) {
       try {
         setIsSubmitting(true);
         
-        // Add the article using the API
-        const newArticle = await api.articles.add(formData);
+        const articleWithUser = {
+          ...formData,
+          user_id: user.id
+        };
+        const newArticle = await api.articles.add(articleWithUser);
         
-        // Add the new article to the existing articles for the charts
         setExistingArticles(prev => [
           ...prev, 
           { 
@@ -175,17 +184,16 @@ function AddArticleContent() {
           }
         ]);
         
-        // Reset form after successful submission
         setFormData({
           title: '',
           authors: '',
           citations: 0,
           year: new Date().getFullYear(),
           journal: '',
-          abstract: ''
+          abstract: '',
+          user_id: user.id
         });
         
-        // Show success message instead of navigating
         setSubmitError('Article added successfully!');
         setTimeout(() => setSubmitError(null), 3000);
       } catch (error) {
@@ -197,7 +205,6 @@ function AddArticleContent() {
     }
   };
 
-  // Handler for starting random article generation
   const handleStartGeneration = () => {
     if (isConnected) {
       startGeneration();
@@ -212,6 +219,8 @@ function AddArticleContent() {
         <div className="mb-6 flex justify-between items-center">
           <h1 className="text-3xl font-bold text-gray-900">Add New Article</h1>
           <div className="flex space-x-2">
+            {isAuthenticated ? (
+              <>
             <button 
               onClick={() => router.push('/files')}
               className="bg-[#E5EFFF] text-gray-800 px-4 py-2 rounded hover:bg-blue-100 transition-colors"
@@ -224,9 +233,19 @@ function AddArticleContent() {
             >
               Back to Library
             </button>
+              </>
+            ) : (
+              <button 
+                onClick={() => router.push('/')}
+                className="bg-[#E5EFFF] text-gray-800 px-4 py-2 rounded hover:bg-blue-100 transition-colors"
+              >
+                Back to Library
+              </button>
+            )}
           </div>
         </div>
         
+        {isAuthenticated ? (
         <div className="space-y-6">
           {/* Form Section */}
           <div className="max-w-md mx-auto bg-white rounded-lg shadow-md p-6">
@@ -395,12 +414,32 @@ function AddArticleContent() {
             )}
           </div>
         </div>
+        ) : (
+          <div className="max-w-md mx-auto bg-white rounded-lg shadow-md p-6 text-center">
+            <p className="text-gray-700 mb-4">Please login to add articles</p>
+            <button
+              onClick={() => setIsLoginModalOpen(true)}
+              className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors"
+            >
+              Login
+            </button>
+          </div>
+        )}
       </div>
+      
+      <LoginModal 
+        isOpen={isLoginModalOpen} 
+        onClose={() => {
+          setIsLoginModalOpen(false);
+          if (!isAuthenticated) {
+            router.push('/');
+          }
+        }} 
+      />
     </div>
   );
 }
 
-// Wrap the component with the WebSocketProvider
 export default function AddArticle() {
   return (
     <WebSocketProvider>

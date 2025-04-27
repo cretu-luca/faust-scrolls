@@ -46,15 +46,12 @@ export default function EditArticle({ params }: { params: Params | Promise<Param
         setIsLoading(true);
         const articleId = resolvedParams.id;
         
-        // Check if we're in offline mode 
         const offline = shouldUseLocalStorage();
         setIsOfflineMode(offline);
         
-        // Check if the ID is a temporary ID (starts with "temp-")
         if (articleId.startsWith('temp-')) {
           setIsOfflineArticle(true);
           
-          // Try to get it from memory storage by ID
           const memoryArticles = memoryStorageService.getArticles();
           const foundArticle = memoryArticles.find(a => a.id === articleId);
           
@@ -74,7 +71,6 @@ export default function EditArticle({ params }: { params: Params | Promise<Param
           }
         }
         
-        // Try to parse as numeric index
         const index = parseInt(articleId);
         
         if (isNaN(index) || index < 0) {
@@ -82,7 +78,6 @@ export default function EditArticle({ params }: { params: Params | Promise<Param
           return;
         }
         
-        // Try API first, fall back to memory storage if offline
         try {
           console.log("Fetching article with index:", index);
           const article = await api.articles.getByIndex(index);
@@ -97,7 +92,6 @@ export default function EditArticle({ params }: { params: Params | Promise<Param
             abstract: article.abstract
           });
         } catch (err) {
-          // If we're offline, try memory storage
           if (offline) {
             const memoryArticle = memoryStorageService.getArticleByIndex(index);
             if (memoryArticle) {
@@ -118,7 +112,6 @@ export default function EditArticle({ params }: { params: Params | Promise<Param
               }
             }
           } else {
-            // Not offline, so just show the error
             console.error('Failed to fetch article:', err);
             if ((err as any).status === 404) {
               setSubmitError('Article not found');
@@ -188,14 +181,11 @@ export default function EditArticle({ params }: { params: Params | Promise<Param
       } catch (error) {
         console.error('Error updating article:', error);
         
-        // If we're in offline mode, update in memory storage
         if (isOfflineMode) {
           try {
             if (resolvedParams.id.startsWith('temp-')) {
-              // Update using ID for temp articles
               memoryStorageService.updateArticle(resolvedParams.id, formData);
             } else {
-              // Try to find by index
               const index = parseInt(resolvedParams.id);
               if (!isNaN(index)) {
                 const article = memoryStorageService.getArticleByIndex(index);
@@ -209,7 +199,6 @@ export default function EditArticle({ params }: { params: Params | Promise<Param
               }
             }
             
-            // Success, navigate back
             router.push('/');
             return;
           } catch (localError) {
@@ -217,7 +206,6 @@ export default function EditArticle({ params }: { params: Params | Promise<Param
             setSubmitError('Failed to update article in offline mode.');
           }
         } else {
-          // Standard online error handling
           const errorDetail = (error as any)?.message || '';
           
           if (errorDetail.includes('Article with index')) {
