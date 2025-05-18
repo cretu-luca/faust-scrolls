@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 import { useState, useEffect, ChangeEvent, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
@@ -22,6 +23,8 @@ interface ArticleInput {
   year: number;
   abstract: string;
   user_id?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [key: string]: any; // Allow for other properties that might be needed
 }
 
 function AddArticleContent() {

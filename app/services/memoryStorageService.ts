@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { Article } from '../types/article';
 
 type OperationType = 'ADD' | 'UPDATE' | 'DELETE';

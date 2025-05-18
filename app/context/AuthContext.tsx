@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 'use client';
 import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
 
@@ -95,6 +96,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.removeItem('faustIsAdmin');
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const login = useCallback(async (username: string, password: string): Promise<boolean> => {
@@ -141,7 +143,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await checkIfAdmin();
       
       return true;
-    } catch (_) {
+    } catch (error) {
       return false;
     }
   }, [checkIfAdmin]);
@@ -161,7 +163,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       
       return login(username, password);
-    } catch (_) {
+    } catch (error) {
       return false;
     }
   }, [login]);

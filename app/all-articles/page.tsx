@@ -364,7 +364,7 @@ export default function AllArticles() {
             
             {!hasMore && articles.length > 0 && (
               <div className="py-4 text-center text-gray-500">
-                You've reached the end of the list
+                You&apos;ve reached the end of the list
               </div>
             )}
             

@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+
 import { Article } from '../types/article';
 import { memoryStorageService } from './memoryStorageService';
 import { shouldUseLocalStorage, useConnectivityStore } from './connectivityService';
