@@ -1,10 +1,15 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
+import { notFound } from 'next/navigation';
 import React, { useState, useEffect, ChangeEvent, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '../../services/api';
 import { memoryStorageService } from '../../services/memoryStorageService';
 import { shouldUseLocalStorage } from '../../services/connectivityService';
+
+// Define type for resolved params
+interface PageParams {
+  id: string;
+}
 
 interface ValidationErrors {
   citations?: string;
@@ -20,8 +25,19 @@ interface ArticleInput {
   abstract: string;
 }
 
-// Most basic approach for Next.js App Router
-export default function EditArticle({ params }: { params: { id: string } }) {
+// Create a standard Next.js page component
+export default function EditArticle({ params }: { params: any }) {
+  // Properly unwrap params Promise with React.use()
+  const resolvedParams = React.use(params) as PageParams;
+  const id = resolvedParams.id;
+  
+  return (
+    <ClientEdit id={id} />
+  );
+}
+
+// Client component with all the functionality
+function ClientEdit({ id }: { id: string }) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -43,7 +59,7 @@ export default function EditArticle({ params }: { params: { id: string } }) {
     const fetchArticle = async () => {
       try {
         setIsLoading(true);
-        const articleId = params.id;
+        const articleId = id;
         
         const offline = shouldUseLocalStorage();
         setIsOfflineMode(offline);
@@ -125,7 +141,7 @@ export default function EditArticle({ params }: { params: { id: string } }) {
     };
 
     fetchArticle();
-  }, [params.id]);
+  }, [id]);
 
   const validateForm = (): boolean => {
     const errors: ValidationErrors = {};
@@ -172,9 +188,9 @@ export default function EditArticle({ params }: { params: { id: string } }) {
       try {
         setIsSubmitting(true);
         
-        console.log(`Attempting to update article with ID: ${params.id}`);
+        console.log(`Attempting to update article with ID: ${id}`);
         
-        await api.articles.update(params.id, formData);
+        await api.articles.update(id, formData);
         
         router.push('/');
       } catch (error) {
@@ -182,10 +198,10 @@ export default function EditArticle({ params }: { params: { id: string } }) {
         
         if (isOfflineMode) {
           try {
-            if (params.id.startsWith('temp-')) {
-              memoryStorageService.updateArticle(params.id, formData);
+            if (id.startsWith('temp-')) {
+              memoryStorageService.updateArticle(id, formData);
             } else {
-              const index = parseInt(params.id);
+              const index = parseInt(id);
               if (!isNaN(index)) {
                 const article = memoryStorageService.getArticleByIndex(index);
                 if (article && article.id) {
@@ -208,9 +224,9 @@ export default function EditArticle({ params }: { params: { id: string } }) {
           const errorDetail = (error as any)?.message || '';
           
           if (errorDetail.includes('Article with index')) {
-            setSubmitError(`The article you're trying to edit (index ${params.id}) could not be found. It may have been deleted or there might be an issue with the index.`);
+            setSubmitError(`The article you're trying to edit (index ${id}) could not be found. It may have been deleted or there might be an issue with the index.`);
           } else if (errorDetail.includes('Article with ID')) {
-            setSubmitError(`The article with ID ${params.id} could not be found. It may have been deleted.`);
+            setSubmitError(`The article with ID ${id} could not be found. It may have been deleted.`);
           } else {
             setSubmitError('Failed to update article. Please try again later.');
           }

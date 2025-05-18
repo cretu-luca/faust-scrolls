@@ -1,5 +1,5 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
+import { notFound } from 'next/navigation';
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '../../services/api';
@@ -7,8 +7,24 @@ import { memoryStorageService } from '../../services/memoryStorageService';
 import { shouldUseLocalStorage } from '../../services/connectivityService';
 import { Article } from '../../types/article';
 
-// Most basic approach for Next.js App Router
-export default function Details({ params }: { params: { id: string } }) {
+// Define type for resolved params
+interface PageParams {
+  id: string;
+}
+
+// Create a standard Next.js page component
+export default function Details({ params }: { params: any }) {
+  // Properly unwrap params Promise with React.use()
+  const resolvedParams = React.use(params) as PageParams;
+  const id = resolvedParams.id;
+
+  return (
+    <ClientDetails id={id} />
+  );
+}
+
+// Client component with all the functionality
+function ClientDetails({ id }: { id: string }) {
   const router = useRouter();
   const [article, setArticle] = useState<Article | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -20,7 +36,7 @@ export default function Details({ params }: { params: { id: string } }) {
     const fetchArticle = async () => {
       try {
         setIsLoading(true);
-        const articleId = params.id;
+        const articleId = id;
         
         const offline = shouldUseLocalStorage();
         setIsOfflineMode(offline);
@@ -84,7 +100,7 @@ export default function Details({ params }: { params: { id: string } }) {
     };
 
     fetchArticle();
-  }, [params.id]);
+  }, [id]);
 
   const handleEdit = () => {
     if (article) {
