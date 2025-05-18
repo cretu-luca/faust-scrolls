@@ -7,9 +7,15 @@ import { memoryStorageService } from '../../services/memoryStorageService';
 import { shouldUseLocalStorage } from '../../services/connectivityService';
 import { Article } from '../../types/article';
 
-type Params = { id: string };
+interface PageParams {
+  id: string;
+}
 
-export default function Details({ params }: { params: Params }) {
+export default function Details({
+  params
+}: {
+  params: PageParams;
+}) {
   const router = useRouter();
   const [article, setArticle] = useState<Article | null>(null);
   const [isLoading, setIsLoading] = useState(true);

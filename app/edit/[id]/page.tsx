@@ -6,7 +6,9 @@ import { api } from '../../services/api';
 import { memoryStorageService } from '../../services/memoryStorageService';
 import { shouldUseLocalStorage } from '../../services/connectivityService';
 
-type Params = { id: string };
+interface PageParams {
+  id: string;
+}
 
 interface ValidationErrors {
   citations?: string;
@@ -22,7 +24,11 @@ interface ArticleInput {
   abstract: string;
 }
 
-export default function EditArticle({ params }: { params: Params }) {
+export default function EditArticle({
+  params
+}: {
+  params: PageParams;
+}) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
