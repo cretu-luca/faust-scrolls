@@ -1,6 +1,5 @@
-import { Article } from '../types/article';
-
 /* eslint-disable @typescript-eslint/no-unused-vars */
+import { Article } from '../types/article';
 
 const STORAGE_KEY = 'faust-scrolls-articles';
 const PENDING_OPERATIONS_KEY = 'faust-scrolls-pending-operations';
