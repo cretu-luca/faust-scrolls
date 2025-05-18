@@ -9,8 +9,7 @@ import { Article } from '../../types/article';
 
 type Params = { id: string };
 
-export default function Details({ params }: { params: Params | Promise<Params> }) {
-  const resolvedParams = params instanceof Promise ? React.use(params) : params;
+export default function Details({ params }: { params: Params }) {
   const router = useRouter();
   const [article, setArticle] = useState<Article | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -22,7 +21,7 @@ export default function Details({ params }: { params: Params | Promise<Params> }
     const fetchArticle = async () => {
       try {
         setIsLoading(true);
-        const articleId = resolvedParams.id;
+        const articleId = params.id;
         
         const offline = shouldUseLocalStorage();
         setIsOfflineMode(offline);
@@ -86,7 +85,7 @@ export default function Details({ params }: { params: Params | Promise<Params> }
     };
 
     fetchArticle();
-  }, [resolvedParams.id]);
+  }, [params.id]);
 
   const handleEdit = () => {
     if (article) {

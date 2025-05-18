@@ -22,8 +22,7 @@ interface ArticleInput {
   abstract: string;
 }
 
-export default function EditArticle({ params }: { params: Params | Promise<Params> }) {
-  const resolvedParams = params instanceof Promise ? React.use(params) : params;
+export default function EditArticle({ params }: { params: Params }) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -45,7 +44,7 @@ export default function EditArticle({ params }: { params: Params | Promise<Param
     const fetchArticle = async () => {
       try {
         setIsLoading(true);
-        const articleId = resolvedParams.id;
+        const articleId = params.id;
         
         const offline = shouldUseLocalStorage();
         setIsOfflineMode(offline);
@@ -127,7 +126,7 @@ export default function EditArticle({ params }: { params: Params | Promise<Param
     };
 
     fetchArticle();
-  }, [resolvedParams.id]);
+  }, [params.id]);
 
   const validateForm = (): boolean => {
     const errors: ValidationErrors = {};
@@ -174,9 +173,9 @@ export default function EditArticle({ params }: { params: Params | Promise<Param
       try {
         setIsSubmitting(true);
         
-        console.log(`Attempting to update article with ID: ${resolvedParams.id}`);
+        console.log(`Attempting to update article with ID: ${params.id}`);
         
-        await api.articles.update(resolvedParams.id, formData);
+        await api.articles.update(params.id, formData);
         
         router.push('/');
       } catch (error) {
@@ -184,10 +183,10 @@ export default function EditArticle({ params }: { params: Params | Promise<Param
         
         if (isOfflineMode) {
           try {
-            if (resolvedParams.id.startsWith('temp-')) {
-              memoryStorageService.updateArticle(resolvedParams.id, formData);
+            if (params.id.startsWith('temp-')) {
+              memoryStorageService.updateArticle(params.id, formData);
             } else {
-              const index = parseInt(resolvedParams.id);
+              const index = parseInt(params.id);
               if (!isNaN(index)) {
                 const article = memoryStorageService.getArticleByIndex(index);
                 if (article && article.id) {
@@ -210,9 +209,9 @@ export default function EditArticle({ params }: { params: Params | Promise<Param
           const errorDetail = (error as any)?.message || '';
           
           if (errorDetail.includes('Article with index')) {
-            setSubmitError(`The article you're trying to edit (index ${resolvedParams.id}) could not be found. It may have been deleted or there might be an issue with the index.`);
+            setSubmitError(`The article you're trying to edit (index ${params.id}) could not be found. It may have been deleted or there might be an issue with the index.`);
           } else if (errorDetail.includes('Article with ID')) {
-            setSubmitError(`The article with ID ${resolvedParams.id} could not be found. It may have been deleted.`);
+            setSubmitError(`The article with ID ${params.id} could not be found. It may have been deleted.`);
           } else {
             setSubmitError('Failed to update article. Please try again later.');
           }
