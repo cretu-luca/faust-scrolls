@@ -261,11 +261,15 @@ export default function Home() {
       setIsLoading(true);
       let data: Article[];
       
+      console.log(`Fetching articles${year ? ` for year ${year}` : ''}`);
+      
       if (year) {
         data = await api.articles.getByYear(year);
       } else {
         data = await api.articles.getAll();
       }
+      
+      console.log(`Successfully fetched ${data.length} articles from API`);
       
       const uniqueArticles = removeDuplicateArticles(data);
       
@@ -275,12 +279,20 @@ export default function Home() {
       
       if (uniqueArticles.length > 0) {
         memoryStorageService.saveArticles(uniqueArticles);
+      } else {
+        console.log("Warning: No articles returned from API");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to fetch articles:', err);
+      
+      if (err?.message?.includes('NetworkError') || err?.message?.includes('Failed to fetch')) {
+        console.log('Network error detected, trying to use local storage');
+        useConnectivityStore.getState().setServerAvailable(false);
+      }
       
       if (shouldUseLocalStorage()) {
         try {
+          console.log('Using local storage as fallback');
           let localData: Article[];
           if (year) {
             localData = memoryStorageService.getArticlesByYear(year);
@@ -289,12 +301,14 @@ export default function Home() {
           }
           
           if (localData.length > 0) {
+            console.log(`Found ${localData.length} articles in local storage`);
             const uniqueLocalData = removeDuplicateArticles(localData);
             setArticles(uniqueLocalData);
             setCurrentPage(1);
             setError(null);
             setIsOffline(true);
           } else {
+            console.log('No articles available in local storage');
             setError('No articles available offline. Please reconnect to network or server.');
           }
         } catch (localErr) {

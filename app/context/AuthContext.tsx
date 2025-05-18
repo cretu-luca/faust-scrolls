@@ -13,7 +13,10 @@ interface AuthContextType {
   register: (name: string, username: string, password: string) => Promise<boolean>;
   logout: () => void;
   isAuthenticated: boolean;
+  isAdmin: boolean;
   token: string | null;
+  checkIfAdmin: () => Promise<boolean>;
+  makeAdmin: () => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -21,11 +24,13 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [token, setToken] = useState<string | null>(null);
 
   useEffect(() => {
     const storedUser = localStorage.getItem('faustUser');
     const storedToken = localStorage.getItem('faustToken');
+    const storedIsAdmin = localStorage.getItem('faustIsAdmin');
     
     if (storedUser && storedToken) {
       try {
@@ -33,13 +38,56 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(parsedUser);
         setToken(storedToken);
         setIsAuthenticated(true);
+        setIsAdmin(storedIsAdmin === 'true');
+        
+        // Verify admin status on load
+        if (storedToken) {
+          checkIfAdmin();
+        }
       } catch (error) {
         console.error('Failed to parse stored user:', error);
         localStorage.removeItem('faustUser');
         localStorage.removeItem('faustToken');
+        localStorage.removeItem('faustIsAdmin');
       }
     }
   }, []);
+
+  const checkIfAdmin = async (): Promise<boolean> => {
+    if (!token || !user) {
+      console.log("No token or user, can't check admin status");
+      setIsAdmin(false);
+      localStorage.setItem('faustIsAdmin', 'false');
+      return false;
+    }
+    
+    try {
+      const response = await fetch('http://127.0.0.1:8000/admin_id', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        const isUserAdmin = data.is_admin === true;
+        
+        setIsAdmin(isUserAdmin);
+        localStorage.setItem('faustIsAdmin', isUserAdmin ? 'true' : 'false');
+        return isUserAdmin;
+      }
+      
+      setIsAdmin(false);
+      localStorage.setItem('faustIsAdmin', 'false');
+      return false;
+    } catch (error) {
+      console.error('Failed to check admin status:', error);
+      setIsAdmin(false);
+      localStorage.setItem('faustIsAdmin', 'false');
+      return false;
+    }
+  };
 
   const login = async (username: string, password: string): Promise<boolean> => {
     try {
@@ -47,7 +95,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       formData.append('username', username);
       formData.append('password', password);
       
-      const tokenResponse = await fetch('http://localhost:8000/token', {
+      const tokenResponse = await fetch('http://127.0.0.1:8000/token', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -62,7 +110,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const tokenData = await tokenResponse.json();
       const accessToken = tokenData.access_token;
       
-      const userResponse = await fetch('http://localhost:8000/users/me', {
+      const userResponse = await fetch('http://127.0.0.1:8000/users/me', {
         headers: {
           'Authorization': `Bearer ${accessToken}`
         }
@@ -80,6 +128,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setToken(accessToken);
       setUser(userData);
       setIsAuthenticated(true);
+      
+      // Check admin status immediately after login
+      await checkIfAdmin();
+      
       return true;
     } catch (error) {
       return false;
@@ -88,7 +140,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const register = async (name: string, username: string, password: string): Promise<boolean> => {
     try {
-      const registerResponse = await fetch('http://localhost:8000/register', {
+      const registerResponse = await fetch('http://127.0.0.1:8000/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -109,13 +161,59 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = () => {
     localStorage.removeItem('faustUser');
     localStorage.removeItem('faustToken');
+    localStorage.removeItem('faustIsAdmin');
     setUser(null);
     setToken(null);
     setIsAuthenticated(false);
+    setIsAdmin(false);
+  };
+
+  const makeAdmin = async (): Promise<boolean> => {
+    if (!token || !user) {
+      console.log("No token or user, can't make admin");
+      return false;
+    }
+    
+    try {
+      console.log("Making request to make_admin endpoint...");
+      const response = await fetch('http://127.0.0.1:8000/make_admin', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      console.log("Make admin response status:", response.status);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log("Make admin response:", data);
+        
+        // Recheck admin status
+        await checkIfAdmin();
+        return true;
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('Failed to make user admin:', error);
+      return false;
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, isAuthenticated, token }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      login, 
+      register, 
+      logout, 
+      isAuthenticated, 
+      isAdmin,
+      token,
+      checkIfAdmin,
+      makeAdmin
+    }}>
       {children}
     </AuthContext.Provider>
   );

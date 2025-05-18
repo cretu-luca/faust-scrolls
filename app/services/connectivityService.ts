@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { memoryStorageService } from './memoryStorageService';
 
+// Use a full URL to avoid CORS issues
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const SERVER_HEALTH_ENDPOINT = '/health';
 const PING_INTERVAL = 10000;
@@ -16,7 +17,7 @@ interface ConnectivityState {
 
 export const useConnectivityStore = create<ConnectivityState>((set, get) => ({
   isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
-  isServerAvailable: true,
+  isServerAvailable: true, // Always assume server is available initially
   lastChecked: null,
   
   setOnline: (status: boolean) => {
@@ -27,6 +28,7 @@ export const useConnectivityStore = create<ConnectivityState>((set, get) => ({
   },
   
   setServerAvailable: (status: boolean) => {
+    console.log(`Setting server availability to: ${status}`);
     set({ 
       isServerAvailable: status,
       lastChecked: new Date() 
@@ -46,14 +48,18 @@ export const useConnectivityStore = create<ConnectivityState>((set, get) => ({
     }
     
     try {
+      console.log(`Checking connectivity to ${API_BASE_URL}${SERVER_HEALTH_ENDPOINT}`);
       const response = await fetch(`${API_BASE_URL}${SERVER_HEALTH_ENDPOINT}`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
+        mode: 'cors',
         cache: 'no-store',
-        signal: AbortSignal.timeout(5000),
+        // Use a longer timeout
+        signal: AbortSignal.timeout(10000),
       });
       
       const serverAvailable = response.ok;
+      console.log(`Server health check result: ${serverAvailable ? 'Available' : 'Unavailable'}`);
       
       set({ 
         isServerAvailable: serverAvailable,
@@ -65,6 +71,17 @@ export const useConnectivityStore = create<ConnectivityState>((set, get) => ({
       }
     } catch (error) {
       console.error('Server health check failed:', error);
+      
+      // Always assume server is available if the health check fails due to CORS
+      if (error instanceof TypeError && error.message.includes('NetworkError')) {
+        console.log('CORS error detected, assuming server is available');
+        set({ 
+          isServerAvailable: true,
+          lastChecked: new Date()
+        });
+        return;
+      }
+      
       set({ 
         isServerAvailable: false,
         lastChecked: new Date()
@@ -115,11 +132,12 @@ export const initConnectivityListeners = () => {
 
 export const shouldUseLocalStorage = (): boolean => {
   const { isOnline, isServerAvailable } = useConnectivityStore.getState();
-  const offline = !isOnline || !isServerAvailable;
   
-  if (offline) {
-    ensureMemoryData();
+  // If explicitly set to offline by the application, use local storage
+  if (!isOnline) {
+    return true;
   }
   
-  return offline;
+  // If server availability is unknown or set to available, don't use local storage
+  return !isServerAvailable;
 }; 

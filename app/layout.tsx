@@ -2,6 +2,7 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import OfflineStatusWrapper from './components/OfflineStatusWrapper'
 import { AuthProvider } from './context/AuthContext'
+import AdminInitializer from './components/AdminInitializer'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -19,8 +20,9 @@ export default function RootLayout({
     <html lang="en">
       <body className={inter.className}>
         <AuthProvider>
-        <OfflineStatusWrapper />
-        {children}
+          <AdminInitializer />
+          <OfflineStatusWrapper />
+          {children}
         </AuthProvider>
       </body>
     </html>
