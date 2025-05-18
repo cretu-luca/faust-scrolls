@@ -7,15 +7,8 @@ import { memoryStorageService } from '../../services/memoryStorageService';
 import { shouldUseLocalStorage } from '../../services/connectivityService';
 import { Article } from '../../types/article';
 
-interface PageParams {
-  id: string;
-}
-
-export default function Details({
-  params
-}: {
-  params: PageParams;
-}) {
+// Most basic approach for Next.js App Router
+export default function Details({ params }: { params: { id: string } }) {
   const router = useRouter();
   const [article, setArticle] = useState<Article | null>(null);
   const [isLoading, setIsLoading] = useState(true);

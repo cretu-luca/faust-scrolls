@@ -6,10 +6,6 @@ import { api } from '../../services/api';
 import { memoryStorageService } from '../../services/memoryStorageService';
 import { shouldUseLocalStorage } from '../../services/connectivityService';
 
-interface PageParams {
-  id: string;
-}
-
 interface ValidationErrors {
   citations?: string;
   year?: string;
@@ -24,11 +20,8 @@ interface ArticleInput {
   abstract: string;
 }
 
-export default function EditArticle({
-  params
-}: {
-  params: PageParams;
-}) {
+// Most basic approach for Next.js App Router
+export default function EditArticle({ params }: { params: { id: string } }) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
