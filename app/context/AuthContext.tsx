@@ -1,5 +1,5 @@
 'use client';
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
 
 interface User {
   id: string;
@@ -27,38 +27,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isAdmin, setIsAdmin] = useState(false);
   const [token, setToken] = useState<string | null>(null);
 
-  useEffect(() => {
-    const storedUser = localStorage.getItem('faustUser');
-    const storedToken = localStorage.getItem('faustToken');
-    const storedIsAdmin = localStorage.getItem('faustIsAdmin');
-    
-    if (storedUser && storedToken) {
-      try {
-        const parsedUser = JSON.parse(storedUser);
-        setUser(parsedUser);
-        setToken(storedToken);
-        setIsAuthenticated(true);
-        setIsAdmin(storedIsAdmin === 'true');
-        
-        // Verify admin status on load
-        if (storedToken) {
-          checkIfAdmin();
-        }
-      } catch (error) {
-        console.error('Failed to parse stored user:', error);
-        localStorage.removeItem('faustUser');
-        localStorage.removeItem('faustToken');
-        localStorage.removeItem('faustIsAdmin');
-      }
-    }
-  }, []);
-
-  const checkIfAdmin = async (): Promise<boolean> => {
+  const checkIfAdmin = useCallback(async (): Promise<boolean> => {
     if (!token || !user) {
       console.log("No token or user, can't check admin status");
       setIsAdmin(false);
       localStorage.setItem('faustIsAdmin', 'false');
       return false;
+    }
+    
+    // Prevent duplicate calls by checking localStorage first
+    const storedIsAdmin = localStorage.getItem('faustIsAdmin');
+    if (storedIsAdmin) {
+      const isUserAdmin = storedIsAdmin === 'true';
+      setIsAdmin(isUserAdmin);
+      return isUserAdmin;
     }
     
     try {
@@ -81,15 +63,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsAdmin(false);
       localStorage.setItem('faustIsAdmin', 'false');
       return false;
-    } catch (error) {
-      console.error('Failed to check admin status:', error);
+    } catch (err) {
+      console.error('Failed to check admin status:', err);
       setIsAdmin(false);
       localStorage.setItem('faustIsAdmin', 'false');
       return false;
     }
-  };
+  }, [token, user]);
 
-  const login = async (username: string, password: string): Promise<boolean> => {
+  useEffect(() => {
+    const storedUser = localStorage.getItem('faustUser');
+    const storedToken = localStorage.getItem('faustToken');
+    const storedIsAdmin = localStorage.getItem('faustIsAdmin');
+    
+    if (storedUser && storedToken) {
+      try {
+        const parsedUser = JSON.parse(storedUser);
+        setUser(parsedUser);
+        setToken(storedToken);
+        setIsAuthenticated(true);
+        setIsAdmin(storedIsAdmin === 'true');
+        
+        // Only check admin status if it's not already set
+        if (!storedIsAdmin && storedToken) {
+          checkIfAdmin();
+        }
+      } catch (err) {
+        console.error('Failed to parse stored user:', err);
+        localStorage.removeItem('faustUser');
+        localStorage.removeItem('faustToken');
+        localStorage.removeItem('faustIsAdmin');
+      }
+    }
+  }, []);
+
+  const login = useCallback(async (username: string, password: string): Promise<boolean> => {
     try {
       const formData = new URLSearchParams();
       formData.append('username', username);
@@ -133,12 +141,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await checkIfAdmin();
       
       return true;
-    } catch (error) {
+    } catch (_) {
       return false;
     }
-  };
+  }, [checkIfAdmin]);
 
-  const register = async (name: string, username: string, password: string): Promise<boolean> => {
+  const register = useCallback(async (name: string, username: string, password: string): Promise<boolean> => {
     try {
       const registerResponse = await fetch('http://127.0.0.1:8000/register', {
         method: 'POST',
@@ -153,12 +161,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       
       return login(username, password);
-    } catch (error) {
+    } catch (_) {
       return false;
     }
-  };
+  }, [login]);
 
-  const logout = () => {
+  const logout = useCallback(() => {
     localStorage.removeItem('faustUser');
     localStorage.removeItem('faustToken');
     localStorage.removeItem('faustIsAdmin');
@@ -166,9 +174,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setToken(null);
     setIsAuthenticated(false);
     setIsAdmin(false);
-  };
+  }, []);
 
-  const makeAdmin = async (): Promise<boolean> => {
+  const makeAdmin = useCallback(async (): Promise<boolean> => {
     if (!token || !user) {
       console.log("No token or user, can't make admin");
       return false;
@@ -200,7 +208,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('Failed to make user admin:', error);
       return false;
     }
-  };
+  }, [token, user, checkIfAdmin]);
 
   return (
     <AuthContext.Provider value={{ 

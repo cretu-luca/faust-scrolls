@@ -8,6 +8,7 @@ const UserMenu: React.FC = () => {
   const { user, logout, isAuthenticated, isAdmin, checkIfAdmin, makeAdmin } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const [isCheckingAdmin, setIsCheckingAdmin] = useState(false);
   
   useEffect(() => {
     console.log("UserMenu - isAdmin:", isAdmin);
@@ -33,7 +34,11 @@ const UserMenu: React.FC = () => {
   };
   
   const handleCheckAdmin = async () => {
+    if (isCheckingAdmin) return;
+    
+    setIsCheckingAdmin(true);
     await checkIfAdmin();
+    setIsCheckingAdmin(false);
     setIsOpen(false);
   };
   
@@ -85,9 +90,10 @@ const UserMenu: React.FC = () => {
           
           <button
             onClick={handleCheckAdmin}
-            className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+            disabled={isCheckingAdmin}
+            className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:bg-gray-200 disabled:text-gray-500"
           >
-            Check Admin Status
+            {isCheckingAdmin ? 'Checking Admin Status...' : 'Check Admin Status'}
           </button>
           
           <button

@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useRouter } from 'next/navigation';
 
@@ -28,55 +28,8 @@ const LogsPage: React.FC = () => {
   const [maliciousUsers, setMaliciousUsers] = useState<MaliciousUser[]>([]);
   const [loadingMalicious, setLoadingMalicious] = useState(false);
 
-  // Add debug logging
-  useEffect(() => {
-    console.log("LogsPage - isAuthenticated:", isAuthenticated);
-    console.log("LogsPage - isAdmin:", isAdmin);
-    console.log("LogsPage - token exists:", !!token);
-  }, [isAuthenticated, isAdmin, token]);
-
-  useEffect(() => {
-    // Redirect if not authenticated
-    if (!isAuthenticated) {
-      console.log("LogsPage - Not authenticated, redirecting to home");
-      router.push('/');
-      return;
-    }
-
-    const fetchLogs = async () => {
-      if (!token) return;
-      
-      try {
-        setLoading(true);
-        const response = await fetch('http://localhost:8000/public_logs', {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-        
-        if (!response.ok) {
-          throw new Error('Failed to fetch logs');
-        }
-        
-        const data = await response.json();
-        
-        // Process logs to detect malicious activity
-        const processedLogs = await detectMaliciousActivity(data.logs);
-        setLogs(processedLogs);
-        setError(null);
-      } catch (err) {
-        setError('Failed to load logs. Please try again later.');
-        console.error('Error fetching logs:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchLogs();
-  }, [isAuthenticated, token, router]);
-
   // Add malicious user to database - quietly ignore errors
-  const addMaliciousUser = async (userId: number) => {
+  const addMaliciousUser = useCallback(async (userId: number) => {
     if (!token) return;
     
     try {
@@ -103,50 +56,10 @@ const LogsPage: React.FC = () => {
       console.error(`Error adding user ${userId} as malicious:`, err);
       return false;
     }
-  };
-
-  // Fetch list of malicious users
-  const fetchMaliciousUsers = async () => {
-    if (!token) return;
-    
-    try {
-      setLoadingMalicious(true);
-      const maliciousUserIds = new Set<number>();
-      
-      // For simplicity, we'll extract malicious users from the logs we already have
-      logs.forEach(log => {
-        if (log.is_malicious) {
-          maliciousUserIds.add(log.user_id);
-        }
-      });
-      
-      // Create array of malicious users with their details
-      const maliciousUsersList: MaliciousUser[] = Array.from(maliciousUserIds).map(userId => {
-        // Find the user's info in logs
-        const userLog = logs.find(log => log.user_id === userId);
-        return {
-          entryid: userId, // Using userId as entryid for simplicity
-          userid: userId,
-          username: userLog?.username || 'Unknown User'
-        };
-      });
-      
-      setMaliciousUsers(maliciousUsersList);
-    } catch (err) {
-      console.error('Error fetching malicious users:', err);
-    } finally {
-      setLoadingMalicious(false);
-    }
-  };
-
-  // Handle opening the modal
-  const handleOpenModal = async () => {
-    await fetchMaliciousUsers();
-    setShowModal(true);
-  };
+  }, [token]);
 
   // Detect if a user has 10 or more requests in the last minute
-  const detectMaliciousActivity = async (logEntries: LogEntry[]): Promise<LogEntry[]> => {
+  const detectMaliciousActivity = useCallback(async (logEntries: LogEntry[]): Promise<LogEntry[]> => {
     console.log(`Processing ${logEntries.length} logs for malicious activity detection...`);
     
     // Sort logs by time (newest first)
@@ -200,13 +113,100 @@ const LogsPage: React.FC = () => {
       ...log,
       is_malicious: maliciousUsers.has(log.user_id)
     }));
-  };
+  }, [addMaliciousUser]);
+
+  // Fetch list of malicious users
+  const fetchMaliciousUsers = useCallback(async () => {
+    if (!token) return;
+    
+    try {
+      setLoadingMalicious(true);
+      const maliciousUserIds = new Set<number>();
+      
+      // For simplicity, we'll extract malicious users from the logs we already have
+      logs.forEach(log => {
+        if (log.is_malicious) {
+          maliciousUserIds.add(log.user_id);
+        }
+      });
+      
+      // Create array of malicious users with their details
+      const maliciousUsersList: MaliciousUser[] = Array.from(maliciousUserIds).map(userId => {
+        // Find the user's info in logs
+        const userLog = logs.find(log => log.user_id === userId);
+        return {
+          entryid: userId, // Using userId as entryid for simplicity
+          userid: userId,
+          username: userLog?.username || 'Unknown User'
+        };
+      });
+      
+      setMaliciousUsers(maliciousUsersList);
+    } catch (err) {
+      console.error('Error fetching malicious users:', err);
+    } finally {
+      setLoadingMalicious(false);
+    }
+  }, [token, logs]);
+
+  // Handle opening the modal
+  const handleOpenModal = useCallback(async () => {
+    await fetchMaliciousUsers();
+    setShowModal(true);
+  }, [fetchMaliciousUsers]);
+
+  // Add debug logging
+  useEffect(() => {
+    console.log("LogsPage - isAuthenticated:", isAuthenticated);
+    console.log("LogsPage - isAdmin:", isAdmin);
+    console.log("LogsPage - token exists:", !!token);
+  }, [isAuthenticated, isAdmin, token]);
+
+  useEffect(() => {
+    // Redirect if not authenticated
+    if (!isAuthenticated) {
+      console.log("LogsPage - Not authenticated, redirecting to home");
+      router.push('/');
+      return;
+    }
+
+    const fetchLogs = async () => {
+      if (!token) return;
+      
+      try {
+        setLoading(true);
+        const response = await fetch('http://localhost:8000/public_logs', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to fetch logs');
+        }
+        
+        const data = await response.json();
+        
+        // Process logs to detect malicious activity
+        const processedLogs = await detectMaliciousActivity(data.logs);
+        setLogs(processedLogs);
+        setError(null);
+      } catch (err) {
+        setError('Failed to load logs. Please try again later.');
+        console.error('Error fetching logs:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchLogs();
+  }, [isAuthenticated, token, router, detectMaliciousActivity]);
 
   // Format date for display
-  const formatDate = (dateString: string) => {
+  const formatDate = useCallback((dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleString();
-  };
+  }, []);
 
   // Modal component for malicious users
   const MaliciousUsersModal = () => {
@@ -354,12 +354,12 @@ const LogsPage: React.FC = () => {
               >
                 Malicious Users
               </button>
-              <button 
-                onClick={() => router.push('/')}
-                className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded font-medium transition-colors"
-              >
-                Back to Home
-              </button>
+            <button 
+              onClick={() => router.push('/')}
+              className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded font-medium transition-colors"
+            >
+              Back to Home
+            </button>
             </div>
           </div>
           
@@ -401,11 +401,11 @@ const LogsPage: React.FC = () => {
                               </svg>
                             </span>
                           )}
-                          {log.username ? (
-                            <span className="font-medium text-gray-700">{log.username} <span className="text-xs text-gray-500 ml-1">({log.user_id})</span></span>
-                          ) : (
-                            <span className="text-gray-500 italic">Unknown</span>
-                          )}
+                        {log.username ? (
+                          <span className="font-medium text-gray-700">{log.username} <span className="text-xs text-gray-500 ml-1">({log.user_id})</span></span>
+                        ) : (
+                          <span className="text-gray-500 italic">Unknown</span>
+                        )}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">

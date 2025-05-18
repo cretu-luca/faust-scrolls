@@ -5,7 +5,6 @@ import { api } from '../services/api';
 import YearChart from '../components/YearChart';
 import CitationsChart from '../components/CitationsChart';
 import DomainHypergraph from '../components/DomainHypergraph';
-import { Article } from '../types/article';
 import { WebSocketProvider, useWebSocket } from '../context/WebSocketContext';
 import { useAuth } from '../context/AuthContext';
 import LoginModal from '../components/LoginModal';
@@ -32,7 +31,18 @@ function AddArticleContent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [existingArticles, setExistingArticles] = useState<any[]>([]);
+  const [existingArticles, setExistingArticles] = useState<{
+    id: number;
+    title: string;
+    authors: string;
+    journal: string;
+    citations: number;
+    year: string;
+    abstract: string;
+    embedding?: number[];
+    coordinates?: { x: number; y: number };
+    [key: string]: any; // Allow for other properties
+  }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
   const { webSocket, isConnected, isGenerating, startGeneration, stopGeneration, lastMessage } = useWebSocket();

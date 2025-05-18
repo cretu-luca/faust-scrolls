@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "./services/api";
 import { Article } from "./types/article";
@@ -49,107 +49,10 @@ export default function Home() {
   const { isAuthenticated } = useAuth();
   
   const wsRef = useRef<WebSocket | null>(null);
-  const [wsConnected, setWsConnected] = useState(false);
 
   const itemsPerPage = 10;
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    
-    const ws = new WebSocket('ws://localhost:8000/ws');
-    wsRef.current = ws;
-    
-    ws.onopen = () => {
-      console.log('WebSocket connected');
-      setWsConnected(true);
-    };
-    
-    ws.onclose = () => {
-      console.log('WebSocket disconnected');
-      setWsConnected(false);
-    };
-    
-    ws.onmessage = (event) => {
-      try {
-        const message = JSON.parse(event.data);
-        console.log('Received WebSocket message:', message);
-        
-        if (message.type === 'new_article') {
-          console.log('New article received:', message.data);
-          setArticles(prevArticles => {
-            const exists = prevArticles.some(article => 
-              article.id === message.data.id || 
-              article.index === message.data.index ||
-              (article.title.toLowerCase() === message.data.title.toLowerCase() && 
-               article.authors.toLowerCase() === message.data.authors.toLowerCase())
-            );
-            
-            if (exists) {
-              console.log('Article already exists in state, not adding duplicate');
-              return prevArticles;
-            }
-            
-            return [...prevArticles, message.data];
-          });
-        } 
-        else if (message.type === 'article_updated') {
-          console.log('Article updated:', message.data);
-          setArticles(prevArticles => 
-            prevArticles.map(article => 
-              article.index === message.data.index ? message.data : article
-            )
-          );
-        }
-      } catch (error) {
-        console.error('Error handling WebSocket message:', error);
-      }
-    };
-    
-    return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    memoryStorageService.initializeIfEmpty();
-    
-    const unsubscribe = useConnectivityStore.subscribe((state) => {
-      const offline = !state.isOnline || !state.isServerAvailable;
-      setIsOffline(offline);
-    });
-    
-    return () => {
-      unsubscribe();
-    };
-  }, []);
-
-  useEffect(() => {
-    fetchArticles();
-  }, []);
-
-  useEffect(() => {
-    if (!isOffline) {
-      syncAndRefresh();
-    } else {
-      ensureLocalData();
-    }
-  }, [isOffline]);
-
-  const ensureLocalData = () => {
-    memoryStorageService.initializeIfEmpty();
-    
-    if (articles.length === 0) {
-      const memoryArticles = memoryStorageService.getArticles();
-      if (memoryArticles.length > 0) {
-        setArticles(removeDuplicateArticles(memoryArticles));
-        setError(null);
-      }
-    }
-  };
-
-  const removeDuplicateArticles = (articlesList: Article[]): Article[] => {
+  const removeDuplicateArticles = useCallback((articlesList: Article[]): Article[] => {
     const unique = new Map<string, Article>();
     
     [...articlesList].reverse().forEach(article => {
@@ -167,9 +70,84 @@ export default function Home() {
     }
     
     return result;
-  };
+  }, []);
 
-  const syncAndRefresh = async () => {
+  const ensureLocalData = useCallback(() => {
+    memoryStorageService.initializeIfEmpty();
+    
+    if (articles.length === 0) {
+      const memoryArticles = memoryStorageService.getArticles();
+      if (memoryArticles.length > 0) {
+        setArticles(removeDuplicateArticles(memoryArticles));
+        setError(null);
+      }
+    }
+  }, [removeDuplicateArticles]);
+
+  const fetchArticles = useCallback(async (year?: number) => {
+    try {
+      setIsLoading(true);
+      let data: Article[];
+      
+      console.log(`Fetching articles${year ? ` for year ${year}` : ''}`);
+      
+      if (year) {
+        data = await api.articles.getByYear(year);
+      } else {
+        data = await api.articles.getAll();
+      }
+      
+      console.log(`Successfully fetched ${data.length} articles from API`);
+      
+      const uniqueArticles = removeDuplicateArticles(data);
+      
+      setArticles(uniqueArticles);
+      setCurrentPage(1);
+      setError(null);
+      
+      if (uniqueArticles.length > 0) {
+        memoryStorageService.saveArticles(uniqueArticles);
+      } else {
+        console.log("Warning: No articles returned from API");
+      }
+    } catch (err: any) {
+      console.error('Failed to fetch articles:', err);
+      
+      if (err?.message?.includes('NetworkError') || err?.message?.includes('Failed to fetch')) {
+        console.log('Network error detected, trying to use local storage');
+        useConnectivityStore.getState().setServerAvailable(false);
+      }
+      
+      if (shouldUseLocalStorage()) {
+        try {
+          console.log('Using local storage as fallback');
+          let localData: Article[];
+          if (year) {
+            localData = memoryStorageService.getArticlesByYear(year);
+          } else {
+            localData = memoryStorageService.getArticles();
+          }
+          
+          if (localData.length > 0) {
+            console.log(`Found ${localData.length} articles in local storage`);
+            setArticles(removeDuplicateArticles(localData));
+            setError(null);
+          } else {
+            setError('No articles available offline.');
+          }
+        } catch (localErr) {
+          console.error('Failed to load from local storage:', localErr);
+          setError('Failed to load articles. Please check your connection.');
+        }
+      } else {
+        setError('Failed to load articles. Please check your connection.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [removeDuplicateArticles]);
+
+  const syncAndRefresh = useCallback(async () => {
     try {
       setIsLoading(true);
       
@@ -221,19 +199,14 @@ export default function Home() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [removeDuplicateArticles]);
 
-  useEffect(() => {
-    if (sortField !== 'original') {
-      applySorting();
-    }
-  }, [sortField, sortOrder]);
-
-  const applySorting = async () => {
+  const applySorting = useCallback(async () => {
     try {
       setIsLoading(true);
       if (sortField === 'original') {
-        await fetchArticles();
+        const data = await api.articles.getAll();
+        setArticles(data);
       } else {
         const data = await api.articles.getSorted(sortField, sortOrder);
         setArticles(data);
@@ -254,74 +227,140 @@ export default function Home() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [sortField, sortOrder]);
 
-  const fetchArticles = async (year?: number) => {
-    try {
-      setIsLoading(true);
-      let data: Article[];
-      
-      console.log(`Fetching articles${year ? ` for year ${year}` : ''}`);
-      
-      if (year) {
-        data = await api.articles.getByYear(year);
-      } else {
-        data = await api.articles.getAll();
-      }
-      
-      console.log(`Successfully fetched ${data.length} articles from API`);
-      
-      const uniqueArticles = removeDuplicateArticles(data);
-      
-      setArticles(uniqueArticles);
-      setCurrentPage(1);
-      setError(null);
-      
-      if (uniqueArticles.length > 0) {
-        memoryStorageService.saveArticles(uniqueArticles);
-      } else {
-        console.log("Warning: No articles returned from API");
-      }
-    } catch (err: any) {
-      console.error('Failed to fetch articles:', err);
-      
-      if (err?.message?.includes('NetworkError') || err?.message?.includes('Failed to fetch')) {
-        console.log('Network error detected, trying to use local storage');
-        useConnectivityStore.getState().setServerAvailable(false);
-      }
-      
-      if (shouldUseLocalStorage()) {
-        try {
-          console.log('Using local storage as fallback');
-          let localData: Article[];
-          if (year) {
-            localData = memoryStorageService.getArticlesByYear(year);
-          } else {
-            localData = memoryStorageService.getArticles();
-          }
-          
-          if (localData.length > 0) {
-            console.log(`Found ${localData.length} articles in local storage`);
-            const uniqueLocalData = removeDuplicateArticles(localData);
-            setArticles(uniqueLocalData);
-            setCurrentPage(1);
-            setError(null);
-            setIsOffline(true);
-          } else {
-            console.log('No articles available in local storage');
-            setError('No articles available offline. Please reconnect to network or server.');
-          }
-        } catch (localErr) {
-          console.error('Failed to load articles from memory storage:', localErr);
-          setError('Failed to load articles in offline mode. Please reload the page.');
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    const ws = new WebSocket('ws://localhost:8000/ws');
+    wsRef.current = ws;
+    
+    ws.onopen = () => {
+      console.log('WebSocket connected');
+    };
+    
+    ws.onclose = () => {
+      console.log('WebSocket disconnected');
+    };
+    
+    const handleMessage = (event: MessageEvent) => {
+      try {
+        const message = JSON.parse(event.data);
+        console.log('Received WebSocket message:', message);
+        
+        if (message.type === 'new_article') {
+          console.log('New article received:', message.data);
+          setArticles(prevArticles => {
+            const exists = prevArticles.some(article => 
+              article.id === message.data.id || 
+              article.index === message.data.index ||
+              (article.title.toLowerCase() === message.data.title.toLowerCase() && 
+               article.authors.toLowerCase() === message.data.authors.toLowerCase())
+            );
+            
+            if (exists) {
+              console.log('Article already exists in state, not adding duplicate');
+              return prevArticles;
+            }
+            
+            return [...prevArticles, message.data];
+          });
+        } 
+        else if (message.type === 'article_updated') {
+          console.log('Article updated:', message.data);
+          setArticles(prevArticles => 
+            prevArticles.map(article => 
+              article.index === message.data.index ? message.data : article
+            )
+          );
         }
-      } else {
-        setError('Failed to load articles. Please try again later.');
+      } catch (error) {
+        console.error('Error handling WebSocket message:', error);
       }
-    } finally {
-      setIsLoading(false);
+    };
+    
+    ws.onmessage = handleMessage;
+    
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    memoryStorageService.initializeIfEmpty();
+    
+    const unsubscribe = useConnectivityStore.subscribe((state) => {
+      const offline = !state.isOnline || !state.isServerAvailable;
+      setIsOffline(offline);
+    });
+    
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setIsLoading(true);
+        let data: Article[] = [];
+        
+        try {
+          data = await api.articles.getAll();
+        } catch (e) {
+          console.error('Error fetching from API:', e);
+          // Try using local data if available
+          const memoryArticles = memoryStorageService.getArticles();
+          if (memoryArticles.length > 0) {
+            data = memoryArticles;
+          }
+        }
+        
+        const uniqueData = data.filter((article, index, self) => 
+          index === self.findIndex(a => a.title === article.title && a.authors === article.authors)
+        );
+        
+        setArticles(uniqueData);
+        setError(null);
+        setIsLoading(false);
+      } catch (err) {
+        console.error('Failed to load data:', err);
+        setError('Failed to load articles');
+        setIsLoading(false);
+      }
+    };
+    
+    loadData();
+  }, []);
+
+  useEffect(() => {
+    if (isOffline) {
+      const memoryArticles = memoryStorageService.getArticles();
+      if (articles.length === 0 && memoryArticles.length > 0) {
+        setArticles(memoryArticles);
+      }
     }
-  };
+  }, [isOffline]);
+
+  useEffect(() => {
+    const doSort = async () => {
+      if (sortField === 'original') return;
+      
+      try {
+        setIsLoading(true);
+        const data = await api.articles.getSorted(sortField, sortOrder);
+        setArticles(data);
+      } catch (err) {
+        console.error('Failed to sort:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    doSort();
+  }, [sortField, sortOrder]);
 
   const handleSearchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

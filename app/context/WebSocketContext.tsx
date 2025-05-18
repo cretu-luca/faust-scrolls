@@ -1,7 +1,6 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { Article } from '../types/article';
 
 interface WebSocketContextType {
   webSocket: WebSocket | null;

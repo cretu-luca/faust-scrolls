@@ -20,7 +20,6 @@ export default function AllArticles() {
   const { isAuthenticated } = useAuth();
   
   const wsRef = useRef<WebSocket | null>(null);
-  const [wsConnected, setWsConnected] = useState(false);
   
   const [hasMore, setHasMore] = useState(true);
   const [page, setPage] = useState(1);
@@ -52,6 +51,58 @@ export default function AllArticles() {
     return result;
   };
   
+  const fetchInitialArticles = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      
+      const offline = shouldUseLocalStorage();
+      setIsOffline(offline);
+      
+      let data: Article[];
+      
+      if (offline) {
+        data = memoryStorageService.getArticles();
+      } else {
+        data = await api.articles.getAll();
+      }
+      
+      console.log(`Total articles fetched: ${data.length}`);
+      
+      const uniqueData = removeDuplicateArticles(data);
+      if (data.length !== uniqueData.length) {
+        console.log(`Removed ${data.length - uniqueData.length} duplicates, now have ${uniqueData.length} articles`);
+      }
+      
+      setArticles(uniqueData);
+      
+      const initialBatch = uniqueData.slice(0, BATCH_SIZE);
+      setDisplayedArticles(initialBatch);
+      setHasMore(uniqueData.length > BATCH_SIZE);
+      setError(null);
+      
+    } catch (err) {
+      console.error('Failed to fetch articles:', err);
+      setError('Failed to load articles. Please try again later.');
+      
+      try {
+        const memoryData = memoryStorageService.getArticles();
+        if (memoryData.length > 0) {
+          const uniqueMemoryData = removeDuplicateArticles(memoryData);
+          setArticles(uniqueMemoryData);
+          const initialBatch = uniqueMemoryData.slice(0, BATCH_SIZE);
+          setDisplayedArticles(initialBatch);
+          setHasMore(uniqueMemoryData.length > BATCH_SIZE);
+          setError(null);
+        }
+      } catch (localErr) {
+        console.error('Failed to load from memory:', localErr);
+      }
+      
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+  
   useEffect(() => {
     if (typeof window === 'undefined' || isOffline) return;
     
@@ -62,12 +113,10 @@ export default function AllArticles() {
     
     ws.onopen = () => {
       console.log('WebSocket connected in AllArticles component');
-      setWsConnected(true);
     };
     
     ws.onclose = () => {
       console.log('WebSocket disconnected in AllArticles component');
-      setWsConnected(false);
     };
     
     ws.onmessage = (event) => {
@@ -129,59 +178,7 @@ export default function AllArticles() {
   
   useEffect(() => {
     fetchInitialArticles();
-  }, []);
-  
-  const fetchInitialArticles = async () => {
-    try {
-      setIsLoading(true);
-      
-      const offline = shouldUseLocalStorage();
-      setIsOffline(offline);
-      
-      let data: Article[];
-      
-      if (offline) {
-        data = memoryStorageService.getArticles();
-      } else {
-        data = await api.articles.getAll();
-      }
-      
-      console.log(`Total articles fetched: ${data.length}`);
-      
-      const uniqueData = removeDuplicateArticles(data);
-      if (data.length !== uniqueData.length) {
-        console.log(`Removed ${data.length - uniqueData.length} duplicates, now have ${uniqueData.length} articles`);
-      }
-      
-      setArticles(uniqueData);
-      
-      const initialBatch = uniqueData.slice(0, BATCH_SIZE);
-      setDisplayedArticles(initialBatch);
-      setHasMore(uniqueData.length > BATCH_SIZE);
-      setError(null);
-      
-    } catch (err) {
-      console.error('Failed to fetch articles:', err);
-      setError('Failed to load articles. Please try again later.');
-      
-      try {
-        const memoryData = memoryStorageService.getArticles();
-        if (memoryData.length > 0) {
-          const uniqueMemoryData = removeDuplicateArticles(memoryData);
-          setArticles(uniqueMemoryData);
-          const initialBatch = uniqueMemoryData.slice(0, BATCH_SIZE);
-          setDisplayedArticles(initialBatch);
-          setHasMore(uniqueMemoryData.length > BATCH_SIZE);
-          setError(null);
-        }
-      } catch (localErr) {
-        console.error('Failed to load from memory:', localErr);
-      }
-      
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  }, [fetchInitialArticles]);
   
   const loadMoreArticles = useCallback(() => {
     if (isLoading || !hasMore) return;
@@ -238,16 +235,18 @@ export default function AllArticles() {
       { threshold: 0.1 }
     );
     
-    if (loaderRef.current) {
-      observer.observe(loaderRef.current);
+    const currentLoaderRef = loaderRef.current;
+    
+    if (currentLoaderRef) {
+      observer.observe(currentLoaderRef);
     }
     
     return () => {
-      if (loaderRef.current) {
-        observer.unobserve(loaderRef.current);
+      if (currentLoaderRef) {
+        observer.unobserve(currentLoaderRef);
       }
     };
-  }, [loaderRef, hasMore, loadMoreArticles]);
+  }, [hasMore, loadMoreArticles]);
   
   const toggleSlidingWindow = () => {
     if (useSlidingWindow) {

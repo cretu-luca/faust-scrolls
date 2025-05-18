@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useConnectivityStore, initConnectivityListeners, shouldUseLocalStorage } from '../services/connectivityService';
 import { api } from '../services/api';
 import { memoryStorageService } from '../services/memoryStorageService';
@@ -10,8 +10,30 @@ const OfflineStatus = () => {
   const [mountedState, setMountedState] = useState<{isOnline: boolean, isServerAvailable: boolean} | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [hasLocalData, setHasLocalData] = useState(false);
-  const [expanded, setExpanded] = useState(true);
   const [isVisible, setIsVisible] = useState(false);
+
+  const checkLocalData = useCallback(() => {
+    const articles = memoryStorageService.getArticles();
+    setHasLocalData(articles.length > 0);
+
+    if (shouldUseLocalStorage() && articles.length === 0) {
+      memoryStorageService.initializeIfEmpty();
+      setHasLocalData(memoryStorageService.getArticles().length > 0);
+    }
+  }, []);
+
+  const syncPendingOperations = useCallback(async () => {
+    try {
+      setSyncing(true);
+      await api.articles.syncPendingOperations();
+      setSyncing(false);
+      
+      checkLocalData();
+    } catch (error) {
+      console.error('Failed to sync pending operations:', error);
+      setSyncing(false);
+    }
+  }, [checkLocalData]);
 
   useEffect(() => {
     const cleanup = initConnectivityListeners();
@@ -30,20 +52,17 @@ const OfflineStatus = () => {
     return () => {
       if (cleanup) cleanup();
     };
-  }, []);
+  }, [checkLocalData]);
 
   useEffect(() => {
     if (!mountedState) return;
     
     const prevState = mountedState;
-    setMountedState({
-      isOnline: useConnectivityStore.getState().isOnline,
-      isServerAvailable: useConnectivityStore.getState().isServerAvailable
-    });
+    const currentIsOnline = useConnectivityStore.getState().isOnline;
+    const currentIsServerAvailable = useConnectivityStore.getState().isServerAvailable;
     
     const wasOffline = !prevState.isOnline || !prevState.isServerAvailable;
-    const isNowOnline = useConnectivityStore.getState().isOnline && 
-                        useConnectivityStore.getState().isServerAvailable;
+    const isNowOnline = currentIsOnline && currentIsServerAvailable;
     
     if (wasOffline && isNowOnline && !syncing) {
       syncPendingOperations();
@@ -51,33 +70,9 @@ const OfflineStatus = () => {
 
     if (!wasOffline && !isNowOnline) {
       checkLocalData();
-      setExpanded(true);
       setIsVisible(true);
     }
-  }, [isOnline, isServerAvailable]);
-
-  const checkLocalData = () => {
-    const articles = memoryStorageService.getArticles();
-    setHasLocalData(articles.length > 0);
-
-    if (shouldUseLocalStorage() && articles.length === 0) {
-      memoryStorageService.initializeIfEmpty();
-      setHasLocalData(memoryStorageService.getArticles().length > 0);
-    }
-  };
-
-  const syncPendingOperations = async () => {
-    try {
-      setSyncing(true);
-      await api.articles.syncPendingOperations();
-      setSyncing(false);
-      
-      checkLocalData();
-    } catch (error) {
-      console.error('Failed to sync pending operations:', error);
-      setSyncing(false);
-    }
-  };
+  }, [isOnline, isServerAvailable, mountedState, syncing, syncPendingOperations, checkLocalData]);
 
   if (mountedState === null) {
     return null;

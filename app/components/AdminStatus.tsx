@@ -1,17 +1,28 @@
 'use client';
 import { useAuth } from '../context/AuthContext';
+import { useState } from 'react';
 
 export default function AdminStatus() {
   const { isAdmin, user, checkIfAdmin, makeAdmin } = useAuth();
+  const [isChecking, setIsChecking] = useState(false);
+  const [isMaking, setIsMaking] = useState(false);
 
   const handleCheckAdmin = async () => {
+    if (isChecking) return;
+    
+    setIsChecking(true);
     const result = await checkIfAdmin();
     alert(`Admin check result: ${result}`);
+    setIsChecking(false);
   };
 
   const handleMakeAdmin = async () => {
+    if (isMaking) return;
+    
+    setIsMaking(true);
     const result = await makeAdmin();
     alert(`Make admin result: ${result}`);
+    setIsMaking(false);
   };
 
   return (
@@ -22,15 +33,17 @@ export default function AdminStatus() {
       <div className="mt-2 space-x-2">
         <button 
           onClick={handleCheckAdmin}
-          className="px-4 py-2 bg-blue-500 text-white rounded"
+          disabled={isChecking}
+          className={`px-4 py-2 ${isChecking ? 'bg-gray-400' : 'bg-blue-500'} text-white rounded`}
         >
-          Check Admin Status
+          {isChecking ? 'Checking...' : 'Check Admin Status'}
         </button>
         <button 
           onClick={handleMakeAdmin}
-          className="px-4 py-2 bg-green-500 text-white rounded"
+          disabled={isMaking}
+          className={`px-4 py-2 ${isMaking ? 'bg-gray-400' : 'bg-green-500'} text-white rounded`}
         >
-          Make Admin
+          {isMaking ? 'Processing...' : 'Make Admin'}
         </button>
       </div>
     </div>
