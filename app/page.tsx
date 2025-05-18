@@ -235,7 +235,7 @@ export default function Home() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     
-    const ws = new WebSocket('ws://localhost:8000/ws');
+    const ws = new WebSocket('wss://faust-scrolls-backend.onrender.com/ws');
     wsRef.current = ws;
     
     ws.onopen = () => {

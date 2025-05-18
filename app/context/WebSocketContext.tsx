@@ -36,7 +36,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    const ws = new WebSocket('ws://localhost:8000/ws');
+    const ws = new WebSocket('wss://faust-scrolls-backend.onrender.com/ws');
     setWebSocket(ws);
 
     ws.onopen = () => {

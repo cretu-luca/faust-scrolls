@@ -46,7 +46,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     
     try {
-      const response = await fetch('http://127.0.0.1:8000/admin_id', {
+      const response = await fetch('https://faust-scrolls-backend.onrender.com/admin_id', {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -106,7 +106,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       formData.append('username', username);
       formData.append('password', password);
       
-      const tokenResponse = await fetch('http://127.0.0.1:8000/token', {
+      const tokenResponse = await fetch('https://faust-scrolls-backend.onrender.com/token', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -121,7 +121,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const tokenData = await tokenResponse.json();
       const accessToken = tokenData.access_token;
       
-      const userResponse = await fetch('http://127.0.0.1:8000/users/me', {
+      const userResponse = await fetch('https://faust-scrolls-backend.onrender.com/users/me', {
         headers: {
           'Authorization': `Bearer ${accessToken}`
         }
@@ -151,7 +151,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const register = useCallback(async (name: string, username: string, password: string): Promise<boolean> => {
     try {
-      const registerResponse = await fetch('http://127.0.0.1:8000/register', {
+      const registerResponse = await fetch('https://faust-scrolls-backend.onrender.com/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -187,7 +187,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     try {
       console.log("Making request to make_admin endpoint...");
-      const response = await fetch('http://127.0.0.1:8000/make_admin', {
+      const response = await fetch('https://faust-scrolls-backend.onrender.com/make_admin', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

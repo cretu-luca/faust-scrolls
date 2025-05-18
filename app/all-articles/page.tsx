@@ -111,7 +111,7 @@ export default function AllArticles() {
     
     console.log('Initializing WebSocket connection in AllArticles component');
    
-    const ws = new WebSocket('ws://localhost:8000/ws');
+    const ws = new WebSocket('wss://faust-scrolls-backend.onrender.com/ws');
     wsRef.current = ws;
     
     ws.onopen = () => {

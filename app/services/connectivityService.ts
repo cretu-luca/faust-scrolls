@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { memoryStorageService } from './memoryStorageService';
 
 // Use a full URL to avoid CORS issues
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://faust-scrolls-backend.onrender.com';
 const SERVER_HEALTH_ENDPOINT = '/health';
 const PING_INTERVAL = 10000;
 

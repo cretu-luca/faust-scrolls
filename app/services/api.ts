@@ -4,7 +4,7 @@ import { Article } from '../types/article';
 import { memoryStorageService } from './memoryStorageService';
 import { shouldUseLocalStorage, useConnectivityStore } from './connectivityService';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://faust-scrolls-backend.onrender.com';
 
 export class APIError extends Error {
   constructor(public status: number, message: string) {
